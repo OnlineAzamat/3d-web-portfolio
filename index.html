@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>3D Portfolio — Kechqurun uy</title>
+  <link rel="stylesheet" href="style.css" />
+
+  <!--
+    Import map — brauzerga "three" degan nom qayerdan yuklanishini aytadi.
+    Shu tufayli main.js ichida xuddi npm loyihasidagidek
+    `import * as THREE from 'three'` deb yoza olamiz, lekin hamma narsa
+    CDN (jsdelivr) orqali keladi — hech qanday bundler kerak emas.
+    Versiya qat'iy belgilangan (0.170.0), shunda CDN yangilanishi
+    loyihani kutilmaganda buzib qo'ymaydi.
+  -->
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+        "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
+      }
+    }
+  </script>
+</head>
+<body>
+  <!--
+    Canvas'ni HTML'da o'zimiz yaratamiz (renderer avtomatik yaratganidan ko'ra),
+    shunda CSS orqali uni to'liq boshqarish osonroq bo'ladi.
+  -->
+  <canvas id="scene"></canvas>
+
+  <!-- type="module" shart: import/export sintaksisi faqat modullarda ishlaydi -->
+  <script type="module" src="main.js"></script>
+</body>
+</html>

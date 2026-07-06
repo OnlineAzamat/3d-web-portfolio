@@ -1,0 +1,42 @@
+/*
+  Sahifa to'liq 3D sahnadan iborat bo'ladi, shuning uchun
+  brauzerning standart chekkalarini (margin) olib tashlaymiz
+  va scroll paydo bo'lishining oldini olamiz.
+*/
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html,
+body {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+
+/*
+  Kechqurun osmoni — gradient fon.
+  Gradientni WebGL emas, CSS chizadi: renderer'ni shaffof (alpha: true)
+  qilamiz va canvas orqasidagi shu gradient "osmon" vazifasini bajaradi.
+  Bu eng arzon usul — GPU'ga qo'shimcha yuk tushmaydi.
+  Yuqorida to'q ko'k (#1a1a3e), pastda binafsha (#4a3b6b) — xuddi
+  quyosh botgandan keyingi ufq kabi.
+*/
+body {
+  background: linear-gradient(to bottom, #1a1a3e 0%, #2f2a55 60%, #4a3b6b 100%);
+}
+
+/*
+  Canvas ekranni to'liq egallaydi. `display: block` — inline element
+  ostidagi mayda bo'shliqni (baseline gap) yo'qotish uchun.
+*/
+#scene {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+}
