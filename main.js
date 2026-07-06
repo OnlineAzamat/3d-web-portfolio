@@ -515,16 +515,23 @@ function animateGroupOpacity(group, targetOpacity) {
 
 let selectedGroup = null;
 
+/* ---------- HTML card'lar bilan bog'lanish ---------- */
+
+const infoCards = document.querySelectorAll('.info-card');
+
 /*
-  Bo'lim tanlanganda chaqiriladi. Hozircha faqat konsolga log —
-  keyingi bosqichda shu joyga HTML/CSS card ochish ulanadi.
+  Bo'lim tanlanganda: mos card'ga .visible klassi qo'shiladi —
+  chiqish/kirish animatsiyasining o'zi CSS transition zimmasida
+  (desktopda chapdan, mobilda pastdan slayd). Qolganlari yopiladi.
 */
 function onSectionSelect(id) {
-  console.log(`[portfolio] Bo'lim tanlandi: ${id}`);
+  infoCards.forEach((card) => {
+    card.classList.toggle('visible', card.dataset.section === id);
+  });
 }
 
 function onSectionDeselect() {
-  console.log('[portfolio] Tanlov bekor qilindi');
+  infoCards.forEach((card) => card.classList.remove('visible'));
 }
 
 function selectGroup(group) {
@@ -583,7 +590,24 @@ function pickGroup(event) {
 
 /* ---------- Hodisalar ---------- */
 
+/*
+  Hodisa card USTIDA yuz berdimi? Card canvas ustidagi HTML qatlam —
+  usiz card ustida yurgan sichqoncha "orqasidagi" uyga ham tegib,
+  hover/tanlov chalkashardi (masalan, card ichidagi tugmani bosish
+  orqadagi bo'sh joyga bosish deb qabul qilinib, cardni yopib yuborardi).
+*/
+function isEventOnCard(event) {
+  return event.target instanceof Element && event.target.closest('.info-card');
+}
+
 window.addEventListener('mousemove', (event) => {
+  if (isEventOnCard(event)) {
+    // Card ustida 3D hover o'chadi; kursorni card o'zi boshqaradi
+    document.body.style.cursor = 'default';
+    interactiveGroups.forEach((g) => { g.userData.targetScale = 1; });
+    return;
+  }
+
   const group = pickGroup(event);
 
   // Bosish mumkinligini kursor shakli bilan bildiramiz
@@ -610,6 +634,8 @@ window.addEventListener('pointerdown', (event) => {
 });
 
 window.addEventListener('click', (event) => {
+  if (isEventOnCard(event)) return; // card ichidagi bosishlar 3D ga tegmaydi
+
   if (pointerDownAt) {
     const moved = Math.hypot(
       event.clientX - pointerDownAt.x,
@@ -626,6 +652,21 @@ window.addEventListener('click', (event) => {
   } else {
     selectGroup(group);
   }
+});
+
+/*
+  Ikki tomonlama deselect: card'dagi "×" tugmasi ham xuddi bo'sh
+  joyga bosilgandek ishlaydi — deselectAll() qavatni joyiga qaytaradi,
+  u esa onSectionDeselect() orqali card'ni yopadi. Yagona "haqiqat
+  manbai" — 3D tanlov holati; UI doim unga ergashadi.
+*/
+document.querySelectorAll('.card-close').forEach((btn) => {
+  btn.addEventListener('click', () => deselectAll());
+});
+
+// Escape ham cardni yopadi — klaviatura foydalanuvchilari uchun qulaylik
+window.addEventListener('keydown', (event) => {
+  if (event.key === 'Escape') deselectAll();
 });
 
 /* ============================================================

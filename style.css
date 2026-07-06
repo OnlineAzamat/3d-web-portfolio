@@ -40,3 +40,252 @@ body {
   height: 100%;
   display: block;
 }
+
+/* ============================================================
+   CARD OVERLAY — 3D sahna ustidagi HTML qatlam
+   ============================================================ */
+
+/*
+  Konteyner butun ekranni qoplaydi, lekin pointer-events: none —
+  sichqoncha hodisalari undan "o'tib ketib" canvas'ga (3D sahnaga)
+  boradi. Faqat ochilgan card o'zi hodisalarni qabul qiladi.
+*/
+.card-overlay {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 10;
+  font-family: 'Quicksand', 'Segoe UI', sans-serif;
+}
+
+/*
+  Card — glass-effekt: yarim shaffof to'q fon + orqadagi 3D sahnani
+  xiralashtiruvchi backdrop-filter. Chegara va tashqi nur (glow)
+  uyning derazalaridagi iliq sariq (#ffb75e) bilan uyg'un — sahna
+  va UI bitta olamga tegishli bo'lib ko'rinadi.
+
+  Desktop holati: chap tomonda, vertikal markazda. Tanlangan qavat
+  3D da O'NG tomonga chiqadi, shuning uchun card chapda — ikkisi
+  bir-birini to'sib qo'ymaydi.
+*/
+.info-card {
+  position: absolute;
+  left: 4vw;
+  top: 50%;
+  width: min(400px, 88vw);
+  max-height: 80vh;
+  overflow-y: auto;
+
+  background: rgba(26, 24, 48, 0.72);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px); /* Safari uchun */
+  border: 1px solid rgba(255, 183, 94, 0.45);
+  border-radius: 20px;
+  box-shadow:
+    0 10px 40px rgba(0, 0, 0, 0.45),
+    0 0 24px rgba(255, 183, 94, 0.12); /* iliq deraza-nur aurasi */
+
+  color: #f3ecdf;
+  cursor: auto; /* body'dagi 3D hover kursori card ichiga "yuqmasin" */
+
+  /*
+    Yashirin holat: ko'rinmas + chapdan biroz surilgan.
+    transition ochish/yopishning ikkalasini ham silliq qiladi.
+    visibility 0.4s KECHIKISH bilan hidden bo'ladi — opacity
+    animatsiyasi tugagunicha element hali "bor" bo'lib turadi.
+  */
+  opacity: 0;
+  visibility: hidden;
+  transform: translate(-36px, -50%);
+  pointer-events: none;
+  transition:
+    opacity 0.4s ease,
+    transform 0.4s ease,
+    visibility 0s linear 0.4s;
+}
+
+/* Ochiq holat — onSectionSelect() shu klassni qo'shadi */
+.info-card.visible {
+  opacity: 1;
+  visibility: visible;
+  transform: translate(0, -50%);
+  pointer-events: auto;
+  transition:
+    opacity 0.4s ease,
+    transform 0.4s ease,
+    visibility 0s; /* ochilishda kechikish kerak emas */
+}
+
+.card-body {
+  padding: 28px;
+}
+
+/* Yopish tugmasi — yuqori o'ng burchakda */
+.card-close {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  width: 34px;
+  height: 34px;
+  border: 1px solid rgba(255, 183, 94, 0.4);
+  border-radius: 50%;
+  background: rgba(255, 183, 94, 0.12);
+  color: #ffb75e;
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+  transition: background 0.2s ease, transform 0.2s ease;
+}
+
+.card-close:hover {
+  background: rgba(255, 183, 94, 0.3);
+  transform: scale(1.1);
+}
+
+/* ---------- Card ichki elementlari ---------- */
+
+.info-card h2 {
+  font-size: 1.5rem;
+  font-weight: 700;
+  margin-bottom: 14px;
+  color: #ffcf8a; /* sarlavha — deraza nuridan sal ochroq tus */
+}
+
+.info-card h3 {
+  font-size: 1.05rem;
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+
+.info-card p {
+  font-size: 0.95rem;
+  line-height: 1.6;
+  margin-bottom: 10px;
+}
+
+.subtitle {
+  color: #ffb75e;
+  font-weight: 500;
+}
+
+/* About: avatar + ism yonma-yon */
+.about-header {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 14px;
+}
+
+.avatar-placeholder {
+  flex-shrink: 0;
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  background: rgba(255, 183, 94, 0.15);
+  border: 2px dashed rgba(255, 183, 94, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 2rem;
+}
+
+/* Projects: har bir loyiha alohida "ichki varaq" */
+.project-item {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 183, 94, 0.2);
+  border-radius: 14px;
+  padding: 14px 16px;
+  margin-bottom: 12px;
+}
+
+.project-item p {
+  margin-bottom: 8px;
+}
+
+/* Skills: ikki ustunli chip-ro'yxat */
+.skills-list {
+  list-style: none;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.skills-list li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 183, 94, 0.2);
+  border-radius: 10px;
+  padding: 8px 12px;
+  font-size: 0.9rem;
+  font-weight: 500;
+}
+
+.skill-icon {
+  font-size: 1.1rem;
+}
+
+/* Contact: tugmalar ustma-ust */
+.contact-links {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 6px;
+}
+
+/* Umumiy tugma — iliq "deraza nuri" uslubida */
+.btn {
+  display: inline-block;
+  padding: 8px 18px;
+  background: rgba(255, 183, 94, 0.16);
+  border: 1px solid rgba(255, 183, 94, 0.55);
+  border-radius: 999px;
+  color: #ffcf8a;
+  font-family: inherit;
+  font-size: 0.9rem;
+  font-weight: 600;
+  text-decoration: none;
+  text-align: center;
+  cursor: pointer;
+  transition: background 0.2s ease, transform 0.2s ease;
+}
+
+.btn:hover {
+  background: rgba(255, 183, 94, 0.35);
+  transform: translateY(-2px);
+}
+
+/* ============================================================
+   RESPONSIVE — mobil: bottom-sheet uslubi
+   Tor ekranda yon panel joy olmaydi; card pastdan slayd bo'lib
+   chiqadi, faqat yuqori burchaklar yumaloq — tanish "sheet" ko'rinishi.
+   ============================================================ */
+@media (max-width: 768px) {
+  .info-card {
+    /* Yon panel o'rniga ekran pastiga yopishgan varaq */
+    left: 0;
+    right: 0;
+    top: auto;
+    bottom: 0;
+    width: auto;
+    max-height: 62vh;
+    border-radius: 20px 20px 0 0;
+    border-bottom: none;
+
+    /* Yashirin holat: to'liq pastga surilgan */
+    transform: translateY(100%);
+  }
+
+  .info-card.visible {
+    transform: translateY(0);
+  }
+
+  .card-body {
+    padding: 22px 20px 28px;
+  }
+
+  .skills-list {
+    grid-template-columns: 1fr;
+  }
+}

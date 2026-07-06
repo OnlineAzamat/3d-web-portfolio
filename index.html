@@ -4,6 +4,19 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>3D Portfolio — Kechqurun uy</title>
+
+  <!--
+    Quicksand — yumaloq, "qog'ozga qo'lda yozilgan" hissi beruvchi shrift,
+    cartoon uslubga mos. preconnect — shrift serveriga ulanishni oldindan
+    ochib, yuklanishni tezlashtiradi.
+  -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Quicksand:wght@400;500;600;700&display=swap"
+    rel="stylesheet"
+  />
+
   <link rel="stylesheet" href="style.css" />
 
   <!--
@@ -29,6 +42,93 @@
     shunda CSS orqali uni to'liq boshqarish osonroq bo'ladi.
   -->
   <canvas id="scene"></canvas>
+
+  <!--
+    Card overlay — 3D canvas USTIDA turadigan HTML qatlam.
+    Konteynerning o'zi pointer-events: none (sichqoncha undan o'tib
+    canvas'ga tegadi), faqat ochilgan card pointer-events: auto oladi.
+    Har bir card data-section orqali 3D dagi qavat userData.id ga mos.
+  -->
+  <div class="card-overlay">
+
+    <!-- ===== ABOUT (1-qavat) ===== -->
+    <article class="info-card" data-section="about">
+      <button class="card-close" aria-label="Yopish">&times;</button>
+      <div class="card-body">
+        <div class="about-header">
+          <!-- Foto joy-tutuvchi: haqiqiy rasm qo'yilganda <img> bilan almashtiriladi -->
+          <div class="avatar-placeholder">👤</div>
+          <div>
+            <h2>Ismingiz Familiyangiz</h2>
+            <p class="subtitle">Full Stack Dasturchi</p>
+          </div>
+        </div>
+        <p>
+          Salom! Men veb-texnologiyalar bilan ishlashni yaxshi ko'radigan
+          dasturchiman. Bu yerga o'zingiz haqingizda 2-3 gapdan iborat
+          qisqa tanishtiruv matni yoziladi.
+        </p>
+      </div>
+    </article>
+
+    <!-- ===== PROJECTS (2-qavat) ===== -->
+    <article class="info-card" data-section="projects">
+      <button class="card-close" aria-label="Yopish">&times;</button>
+      <div class="card-body">
+        <h2>Loyihalar</h2>
+
+        <div class="project-item">
+          <h3>Loyiha nomi 1</h3>
+          <p>Loyiha haqida bir-ikki gaplik qisqa tavsif shu yerda turadi.</p>
+          <a class="btn" href="#" target="_blank" rel="noopener">Ko'rish</a>
+        </div>
+
+        <div class="project-item">
+          <h3>Loyiha nomi 2</h3>
+          <p>Loyiha haqida bir-ikki gaplik qisqa tavsif shu yerda turadi.</p>
+          <a class="btn" href="#" target="_blank" rel="noopener">Ko'rish</a>
+        </div>
+
+        <div class="project-item">
+          <h3>Loyiha nomi 3</h3>
+          <p>Loyiha haqida bir-ikki gaplik qisqa tavsif shu yerda turadi.</p>
+          <a class="btn" href="#" target="_blank" rel="noopener">Ko'rish</a>
+        </div>
+      </div>
+    </article>
+
+    <!-- ===== SKILLS (tom) ===== -->
+    <article class="info-card" data-section="skills">
+      <button class="card-close" aria-label="Yopish">&times;</button>
+      <div class="card-body">
+        <h2>Ko'nikmalar</h2>
+        <!-- Ikonkalar hozircha emoji joy-tutuvchi; keyin SVG/rasmga almashtiriladi -->
+        <ul class="skills-list">
+          <li><span class="skill-icon">🟨</span> JavaScript</li>
+          <li><span class="skill-icon">🎲</span> Three.js</li>
+          <li><span class="skill-icon">🌐</span> HTML / CSS</li>
+          <li><span class="skill-icon">🟩</span> Node.js</li>
+          <li><span class="skill-icon">🗄️</span> SQL / NoSQL</li>
+          <li><span class="skill-icon">🔧</span> Git</li>
+        </ul>
+      </div>
+    </article>
+
+    <!-- ===== CONTACT (pochta qutisi) ===== -->
+    <article class="info-card" data-section="contact">
+      <button class="card-close" aria-label="Yopish">&times;</button>
+      <div class="card-body">
+        <h2>Bog'lanish</h2>
+        <p>Hamkorlik taklifingiz bormi? Xat yozing — pochta qutisi doim ochiq!</p>
+        <div class="contact-links">
+          <a class="btn" href="mailto:email@example.com">✉️ Email</a>
+          <a class="btn" href="https://github.com/username" target="_blank" rel="noopener">🐙 GitHub</a>
+          <a class="btn" href="https://linkedin.com/in/username" target="_blank" rel="noopener">💼 LinkedIn</a>
+        </div>
+      </div>
+    </article>
+
+  </div>
 
   <!-- type="module" shart: import/export sintaksisi faqat modullarda ishlaydi -->
   <script type="module" src="main.js"></script>
