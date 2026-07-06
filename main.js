@@ -111,18 +111,306 @@ const ground = new THREE.Mesh(groundGeometry, groundMaterial);
 ground.rotation.x = -Math.PI / 2;
 scene.add(ground);
 
+/* ============================================================
+   6. VAQTINCHALIK YORUG'LIK
+   MeshToonMaterial — yorug'likka bog'liq material: sahnada birorta
+   ham yorug'lik bo'lmasa, u qop-qora ko'rinadi. Shuning uchun uy
+   shakllari ko'rinishi uchun minimal "texnik" yorug'lik qo'yamiz.
+   Keyingi bosqichda bular to'laqonli kechki yoritish (oy nuri,
+   derazalardan taraladigan iliq nur) bilan almashtiriladi.
+   ============================================================ */
+
 /*
-  Vaqtinchalik yordamchi to'r (grid) — bo'sh sahnada kontrollar
-  ishlayotganini ko'rish uchun orientir. Uy qurilganda olib tashlaymiz.
-  0.01 balandlik — yer bilan ustma-ust tushib "lippillash"
-  (z-fighting) bo'lmasligi uchun.
+  HemisphereLight — tepadan osmon rangi (ko'k-binafsha), pastdan
+  o'tloq aksi (yashil) tushadi. Bu sahnaga umumiy bazaviy yorug'lik beradi.
 */
-const grid = new THREE.GridHelper(80, 40, 0x3a6b4a, 0x2a5a3a);
-grid.position.y = 0.01;
-scene.add(grid);
+const tempHemiLight = new THREE.HemisphereLight(0x9a94d8, 0x3a5a3a, 0.9);
+scene.add(tempHemiLight);
+
+/*
+  DirectionalLight — bir tomondan tushadigan yo'nalishli nur.
+  Busiz toon materialda "cel-shading" pog'onalari (yorug' tomon /
+  soya tomon kontrasti) umuman ko'rinmaydi.
+*/
+const tempDirLight = new THREE.DirectionalLight(0xfff0dd, 1.3);
+tempDirLight.position.set(6, 10, 5);
+scene.add(tempDirLight);
 
 /* ============================================================
-   6. RESIZE — oyna o'lchami o'zgarganda
+   7. UY — cartoon uslubda, 3 ta interaktiv qism
+   Har bir qism (floor1, floor2, roof, contact) ALOHIDA THREE.Group:
+   keyingi bosqichda Raycaster sichqoncha qaysi qismga tekkanini
+   aniqlaydi va group.userData orqali tegishli bo'limni (About,
+   Projects, Skills, Contact) ochadi.
+   ============================================================ */
+
+/*
+  Cartoon (cel-shading) effektining kaliti — gradient tekstura.
+  MeshToonMaterial yorug'likni silliq emas, shu teksturadagi
+  pog'onalar bo'yicha "kesib" ko'rsatadi: 4 ta qiymat = 4 ta
+  yorug'lik bandi. NearestFilter shart — aks holda brauzer
+  pog'onalarni yumshatib yuboradi va effekt yo'qoladi.
+  Bitta tekstura barcha toon materiallarga baham ko'riladi.
+*/
+function createToonGradientMap() {
+  const steps = new Uint8Array([80, 140, 200, 255]);
+  const gradientMap = new THREE.DataTexture(steps, steps.length, 1, THREE.RedFormat);
+  gradientMap.minFilter = THREE.NearestFilter;
+  gradientMap.magFilter = THREE.NearestFilter;
+  gradientMap.needsUpdate = true;
+  return gradientMap;
+}
+
+function createHouse() {
+  const house = new THREE.Group();
+  house.name = 'house';
+
+  const gradientMap = createToonGradientMap();
+
+  // Qisqa yordamchi: berilgan rangda cartoon material yasaydi
+  const toon = (color) => new THREE.MeshToonMaterial({ color, gradientMap });
+
+  /*
+    Deraza oynasi — emissive material: yorug'liksiz ham "o'zidan nur
+    sochib" ko'rinadi. Kechki sahnada derazalar xuddi ichkarida chiroq
+    yongandek bo'ladi. Hamma deraza BITTA materialni bo'lishadi —
+    keyinchalik nur kuchini (masalan, chiroq "yonishi"ni) bir joydan
+    boshqarish oson bo'ladi.
+  */
+  const glassMaterial = new THREE.MeshStandardMaterial({
+    color: 0x2a1a0a,          // o'chiq holatda to'q shisha rangi
+    emissive: 0xffb75e,       // iliq sariq nur
+    emissiveIntensity: 0.85
+  });
+
+  const frameMaterial = toon(0xfff4e0); // deraza/eshik hoshiyalari — oq-krem
+  const trimMaterial = toon(0x8a5a3a);  // qavatlar orasidagi karniz — jigarrang
+
+  /*
+    Deraza yasovchi yordamchi: hoshiya (frame) + oyna (glass).
+    Oyna hoshiyadan bir oz oldinroq chiqib turadi — ikki sirt
+    ustma-ust tushib "lippillashi" (z-fighting) oldini oladi.
+  */
+  function createWindow(width, height) {
+    const win = new THREE.Group();
+
+    const frame = new THREE.Mesh(
+      new THREE.BoxGeometry(width, height, 0.12),
+      frameMaterial
+    );
+    const glass = new THREE.Mesh(
+      new THREE.BoxGeometry(width - 0.16, height - 0.16, 0.14),
+      glassMaterial
+    );
+
+    win.add(frame, glass);
+    return win;
+  }
+
+  /* ---------- 1-QAVAT — "About Me" (keng asos) ---------- */
+  const FLOOR1_W = 4.4, FLOOR1_H = 2.4, FLOOR1_D = 4.4;
+
+  const floor1 = new THREE.Group();
+  floor1.name = 'floor1';
+  floor1.position.y = 0;
+  // Raycaster uchun metadata; originalY — hover'da qavatni ko'tarib,
+  // keyin joyiga qaytarish uchun boshlang'ich balandlik
+  floor1.userData = { id: 'about', title: 'About Me', originalY: 0 };
+
+  const walls1 = new THREE.Mesh(
+    new THREE.BoxGeometry(FLOOR1_W, FLOOR1_H, FLOOR1_D),
+    toon(0xf5e3c0) // krem devorlar
+  );
+  walls1.position.y = FLOOR1_H / 2; // box markazdan o'lchanadi, asosini yerga qo'yamiz
+  floor1.add(walls1);
+
+  // Qavat tepasidagi karniz — cartoon uslubga xos qalin ajratuvchi chiziq
+  const trim1 = new THREE.Mesh(
+    new THREE.BoxGeometry(FLOOR1_W + 0.35, 0.2, FLOOR1_D + 0.35),
+    trimMaterial
+  );
+  trim1.position.y = FLOOR1_H;
+  floor1.add(trim1);
+
+  // Eshik — old tomonning markazida, devordan sal chiqib turadi
+  const door = new THREE.Mesh(
+    new THREE.BoxGeometry(1.0, 1.7, 0.1),
+    toon(0x7a4a28)
+  );
+  door.position.set(0, 0.85, FLOOR1_D / 2 + 0.05);
+  floor1.add(door);
+
+  // Eshikdagi kichik darcha — u ham nur sochadi
+  const doorWindow = new THREE.Mesh(
+    new THREE.BoxGeometry(0.5, 0.3, 0.12),
+    glassMaterial
+  );
+  doorWindow.position.set(0, 1.4, FLOOR1_D / 2 + 0.06);
+  floor1.add(doorWindow);
+
+  // Ostona toshi
+  const doorStep = new THREE.Mesh(
+    new THREE.BoxGeometry(1.3, 0.12, 0.5),
+    toon(0x9a9aa5)
+  );
+  doorStep.position.set(0, 0.06, FLOOR1_D / 2 + 0.25);
+  floor1.add(doorStep);
+
+  // Old derazalar — eshikning ikki yonida
+  const win1Left = createWindow(0.9, 1.0);
+  win1Left.position.set(-1.45, 1.35, FLOOR1_D / 2 + 0.02);
+  const win1Right = createWindow(0.9, 1.0);
+  win1Right.position.set(1.45, 1.35, FLOOR1_D / 2 + 0.02);
+  floor1.add(win1Left, win1Right);
+
+  // Yon derazalar (chap va o'ng devorlarda bittadan)
+  const win1SideR = createWindow(0.9, 1.0);
+  win1SideR.rotation.y = Math.PI / 2;
+  win1SideR.position.set(FLOOR1_W / 2 + 0.02, 1.35, 0);
+  const win1SideL = createWindow(0.9, 1.0);
+  win1SideL.rotation.y = -Math.PI / 2;
+  win1SideL.position.set(-(FLOOR1_W / 2 + 0.02), 1.35, 0);
+  floor1.add(win1SideR, win1SideL);
+
+  house.add(floor1);
+
+  /* ---------- 2-QAVAT — "Projects" (torroq) ---------- */
+  const FLOOR2_W = 3.6, FLOOR2_H = 2.1, FLOOR2_D = 3.6;
+  const FLOOR2_BASE = FLOOR1_H + 0.1; // 1-qavat karnizining ustidan boshlanadi
+
+  const floor2 = new THREE.Group();
+  floor2.name = 'floor2';
+  floor2.position.y = FLOOR2_BASE;
+  floor2.userData = { id: 'projects', title: 'Projects', originalY: FLOOR2_BASE };
+
+  const walls2 = new THREE.Mesh(
+    new THREE.BoxGeometry(FLOOR2_W, FLOOR2_H, FLOOR2_D),
+    toon(0xeac89a) // 1-qavatdan farqli — iliq qum/shaftoli rang
+  );
+  walls2.position.y = FLOOR2_H / 2;
+  floor2.add(walls2);
+
+  const trim2 = new THREE.Mesh(
+    new THREE.BoxGeometry(FLOOR2_W + 0.3, 0.2, FLOOR2_D + 0.3),
+    trimMaterial
+  );
+  trim2.position.y = FLOOR2_H;
+  floor2.add(trim2);
+
+  // Old tomonda ikkita deraza
+  const win2Left = createWindow(0.85, 0.95);
+  win2Left.position.set(-0.95, 1.15, FLOOR2_D / 2 + 0.02);
+  const win2Right = createWindow(0.85, 0.95);
+  win2Right.position.set(0.95, 1.15, FLOOR2_D / 2 + 0.02);
+  floor2.add(win2Left, win2Right);
+
+  // Yon derazalar
+  const win2SideR = createWindow(0.85, 0.95);
+  win2SideR.rotation.y = Math.PI / 2;
+  win2SideR.position.set(FLOOR2_W / 2 + 0.02, 1.15, 0);
+  const win2SideL = createWindow(0.85, 0.95);
+  win2SideL.rotation.y = -Math.PI / 2;
+  win2SideL.position.set(-(FLOOR2_W / 2 + 0.02), 1.15, 0);
+  floor2.add(win2SideR, win2SideL);
+
+  house.add(floor2);
+
+  /* ---------- TOM — "Skills" (uchburchak prizma) ---------- */
+  const ROOF_W = 4.4, ROOF_H = 1.8, ROOF_D = 4.6; // 2-qavatdan kengroq — soyabon effekti
+  const ROOF_BASE = FLOOR2_BASE + FLOOR2_H + 0.1; // 2-qavat karnizi ustidan
+
+  const roof = new THREE.Group();
+  roof.name = 'roof';
+  roof.position.y = ROOF_BASE;
+  roof.userData = { id: 'skills', title: 'Skills', originalY: ROOF_BASE };
+
+  /*
+    Uchburchak kesimni Shape bilan chizib, ExtrudeGeometry orqali
+    orqaga cho'zamiz — klassik ikki nishabli (gable) tom hosil bo'ladi.
+  */
+  const roofShape = new THREE.Shape();
+  roofShape.moveTo(-ROOF_W / 2, 0);
+  roofShape.lineTo(ROOF_W / 2, 0);
+  roofShape.lineTo(0, ROOF_H);
+  roofShape.closePath();
+
+  const roofGeometry = new THREE.ExtrudeGeometry(roofShape, {
+    depth: ROOF_D,
+    bevelEnabled: false
+  });
+  roofGeometry.translate(0, 0, -ROOF_D / 2); // ekstruziya +z ga ketadi, markazga suramiz
+
+  const roofMesh = new THREE.Mesh(roofGeometry, toon(0xb0452e)); // to'q g'isht-qizil
+  roof.add(roofMesh);
+
+  // Old frontondagi dumaloq chordoq darchasi — emissive
+  const atticWindow = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.28, 0.28, 0.1, 24),
+    glassMaterial
+  );
+  atticWindow.rotation.x = Math.PI / 2; // silindrni old tomonga qaratamiz
+  atticWindow.position.set(0, 0.62, ROOF_D / 2 + 0.02);
+  roof.add(atticWindow);
+
+  // Mo'ri — tom nishabiga botirib qo'yilgan
+  const chimney = new THREE.Mesh(
+    new THREE.BoxGeometry(0.5, 0.9, 0.5),
+    trimMaterial
+  );
+  chimney.position.set(1.2, 1.05, -1.1);
+  roof.add(chimney);
+
+  house.add(roof);
+
+  /* ---------- POCHTA QUTISI — "Contact" ---------- */
+  const contact = new THREE.Group();
+  contact.name = 'contact';
+  contact.position.set(2.6, 0, 3.4); // eshik yo'lagining o'ng tomonida
+  contact.rotation.y = -0.35;        // biroz kameraga qaragan
+  contact.userData = { id: 'contact', title: 'Contact', originalY: 0 };
+
+  const post = new THREE.Mesh(
+    new THREE.BoxGeometry(0.14, 1.0, 0.14),
+    toon(0x7a4a28)
+  );
+  post.position.y = 0.5;
+
+  const mailboxBody = new THREE.Mesh(
+    new THREE.BoxGeometry(0.42, 0.36, 0.62),
+    toon(0x4a6fa5) // ko'k quti — iliq uy fonida yaxshi ajralib turadi
+  );
+  mailboxBody.position.y = 1.12;
+
+  // Old qopqoqdagi xat tirqishi — emissive, keyin "yonadi"
+  const mailSlot = new THREE.Mesh(
+    new THREE.BoxGeometry(0.26, 0.06, 0.05),
+    glassMaterial
+  );
+  mailSlot.position.set(0, 1.14, 0.31);
+
+  // Qizil bayroqcha — pochta qutisining klassik belgisi
+  const flagPole = new THREE.Mesh(
+    new THREE.BoxGeometry(0.05, 0.3, 0.05),
+    toon(0xd94f3d)
+  );
+  flagPole.position.set(0.24, 1.35, -0.15);
+  const flag = new THREE.Mesh(
+    new THREE.BoxGeometry(0.05, 0.12, 0.22),
+    toon(0xd94f3d)
+  );
+  flag.position.set(0.24, 1.47, -0.06);
+
+  contact.add(post, mailboxBody, mailSlot, flagPole, flag);
+  house.add(contact);
+
+  return house;
+}
+
+const house = createHouse();
+scene.add(house);
+
+/* ============================================================
+   8. RESIZE — oyna o'lchami o'zgarganda
    ============================================================ */
 window.addEventListener('resize', () => {
   // Kameraning ekran nisbatini yangilaymiz, aks holda rasm cho'ziladi
@@ -135,7 +423,7 @@ window.addEventListener('resize', () => {
 });
 
 /* ============================================================
-   7. ANIMATSIYA SIKLI (animate loop)
+   9. ANIMATSIYA SIKLI (animate loop)
    Har kadrda (~60 fps) sahnani qayta chizadi.
    ============================================================ */
 function animate() {
