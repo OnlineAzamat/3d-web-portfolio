@@ -410,7 +410,226 @@ const house = createHouse();
 scene.add(house);
 
 /* ============================================================
-   8. RESIZE — oyna o'lchami o'zgarganda
+   8. INTERAKTIVLIK — Raycaster: hover va tanlash
+   Mexanika:
+   - hover:  kursor qavat ustida → cursor 'pointer' + qavat 1.03x
+             kattalashadi (silliq lerp bilan, animate() ichida)
+   - click:  qavat yon-yuqoriga chiqadi, qolganlari xiralashadi,
+             onSectionSelect(id) chaqiriladi
+   - qayta click (o'sha qavat yoki bo'sh joy) → hammasi asl holatga
+   ============================================================ */
+
+const ANIM_DURATION = 450; // ms — barcha tanlash animatsiyalari uchun yagona muddat
+
+// Tanlangan qavat qancha siljiydi: yon tomonga +3, biroz yuqoriga
+const SELECT_OFFSET = new THREE.Vector3(3, 0.6, 0);
+
+// Interaktiv guruhlar — uy ichidagi userData.id ga ega to'rttasi
+const interactiveGroups = house.children.filter((child) => child.userData.id);
+
+/*
+  Materiallarni guruh bo'yicha ajratamiz. Uy qurilganda oyna, hoshiya
+  va karniz materiallari guruhlar o'rtasida BAHAM ko'rilgan edi — endi
+  bir guruhning opacity'sini o'zgartirsak boshqalariga ta'sir qilmasligi
+  uchun har bir mesh materialning o'z nusxasini (clone) oladi.
+  Guruhning barcha materiallari userData.materials ro'yxatida turadi —
+  xiralashtirish animatsiyasi shu ro'yxat ustida ishlaydi.
+*/
+interactiveGroups.forEach((group) => {
+  const materials = [];
+  group.traverse((obj) => {
+    if (obj.isMesh) {
+      obj.material = obj.material.clone();
+      /*
+        transparent boshidanoq yoqib qo'yiladi. Sabab: three.js shaderni
+        material birinchi render bo'lganda kompilyatsiya qiladi va
+        transparent=false bo'lsa unga OPAQUE define kiradi — alpha doim
+        1.0 ga majburlanadi. Keyin transparent'ni yoqish needsUpdate
+        (shader qayta kompilyatsiyasi) talab qiladi va har bosishda
+        qoqilish (hitch) beradi. Shu 30 ga yaqin material uchun doimiy
+        transparent rejim arzonroq va xavfsizroq.
+      */
+      obj.material.transparent = true;
+      materials.push(obj.material);
+    }
+  });
+  group.userData.materials = materials;
+  // Asl pozitsiya to'liq vektor sifatida (contact'da x/z ham noldan farqli)
+  group.userData.basePosition = group.position.clone();
+  // Hover uchun maqsad masshtab — animate() har kadrda shunga intiladi
+  group.userData.targetScale = 1;
+});
+
+/* ---------- Mini-tween tizimi ----------
+   Har bir animatsiya: boshlanish vaqti + davomiylik + onUpdate(k),
+   bunda k — 0..1 oralig'ida ease qilingan progress. animate() har
+   kadrda updateTweens() ni chaqiradi. `key` bir xil bo'lgan eski tween
+   bekor qilinadi — tez-tez bosilganda animatsiyalar to'qnashmasligi uchun. */
+const activeTweens = new Map();
+
+// Klassik ease-in-out: sekin boshlanadi, tezlashadi, sekin to'xtaydi
+function easeInOutCubic(t) {
+  return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+}
+
+function startTween(key, duration, onUpdate, onComplete) {
+  activeTweens.set(key, { start: performance.now(), duration, onUpdate, onComplete });
+}
+
+function updateTweens(now) {
+  for (const [key, tw] of activeTweens) {
+    const t = Math.min((now - tw.start) / tw.duration, 1);
+    tw.onUpdate(easeInOutCubic(t));
+    if (t === 1) {
+      activeTweens.delete(key);
+      if (tw.onComplete) tw.onComplete();
+    }
+  }
+}
+
+/* ---------- Guruh animatsiyalari ---------- */
+
+// Guruhni berilgan nuqtaga silliq ko'chiradi
+function animateGroupPosition(group, targetPos) {
+  const startPos = group.position.clone();
+  startTween(`pos:${group.userData.id}`, ANIM_DURATION, (k) => {
+    group.position.lerpVectors(startPos, targetPos, k);
+  });
+}
+
+// Guruhning barcha materiallarini berilgan opacity'ga olib boradi
+// (materiallar setup'da doimiy transparent qilib qo'yilgan — bu yerda
+// faqat opacity qiymati animatsiya qilinadi)
+function animateGroupOpacity(group, targetOpacity) {
+  const materials = group.userData.materials;
+  const startOpacities = materials.map((m) => m.opacity);
+
+  startTween(`opacity:${group.userData.id}`, ANIM_DURATION, (k) => {
+    materials.forEach((m, i) => {
+      m.opacity = THREE.MathUtils.lerp(startOpacities[i], targetOpacity, k);
+    });
+  });
+}
+
+/* ---------- Tanlash holati ---------- */
+
+let selectedGroup = null;
+
+/*
+  Bo'lim tanlanganda chaqiriladi. Hozircha faqat konsolga log —
+  keyingi bosqichda shu joyga HTML/CSS card ochish ulanadi.
+*/
+function onSectionSelect(id) {
+  console.log(`[portfolio] Bo'lim tanlandi: ${id}`);
+}
+
+function onSectionDeselect() {
+  console.log('[portfolio] Tanlov bekor qilindi');
+}
+
+function selectGroup(group) {
+  selectedGroup = group;
+
+  // Tanlangan qavat: asl joyidan yon-yuqoriga chiqadi, to'liq ravshan
+  const target = group.userData.basePosition.clone().add(SELECT_OFFSET);
+  animateGroupPosition(group, target);
+  animateGroupOpacity(group, 1);
+
+  // Qolganlari: joyiga qaytadi (agar oldin boshqasi tanlangan bo'lsa) va xiralashadi
+  interactiveGroups.forEach((other) => {
+    if (other !== group) {
+      animateGroupPosition(other, other.userData.basePosition);
+      animateGroupOpacity(other, 0.3);
+    }
+  });
+
+  onSectionSelect(group.userData.id);
+}
+
+function deselectAll() {
+  if (!selectedGroup) return;
+  selectedGroup = null;
+
+  interactiveGroups.forEach((group) => {
+    animateGroupPosition(group, group.userData.basePosition);
+    animateGroupOpacity(group, 1);
+  });
+
+  onSectionDeselect();
+}
+
+/* ---------- Raycasting ---------- */
+
+const raycaster = new THREE.Raycaster();
+const mouse = new THREE.Vector2();
+
+/*
+  Kursor ostidagi interaktiv guruhni topadi.
+  Raycaster mesh'ga (masalan, derazaga) tegadi — undan yuqoriga,
+  userData.id ga ega ota-guruhgacha ko'tarilamiz.
+*/
+function pickGroup(event) {
+  mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+  mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+
+  raycaster.setFromCamera(mouse, camera);
+  const hits = raycaster.intersectObjects(interactiveGroups, true);
+  if (hits.length === 0) return null;
+
+  let obj = hits[0].object;
+  while (obj && !obj.userData.id) obj = obj.parent;
+  return obj;
+}
+
+/* ---------- Hodisalar ---------- */
+
+window.addEventListener('mousemove', (event) => {
+  const group = pickGroup(event);
+
+  // Bosish mumkinligini kursor shakli bilan bildiramiz
+  document.body.style.cursor = group ? 'pointer' : 'default';
+
+  // Hover qilingan guruh kattalashish maqsadini oladi, qolganlari — 1.
+  // Haqiqiy masshtablash animate() ichida silliq lerp bilan bo'ladi.
+  interactiveGroups.forEach((g) => {
+    g.userData.targetScale = g === group ? 1.03 : 1;
+  });
+});
+
+/*
+  OrbitControls bilan aylantirish ham mouseup'da 'click' hodisasini
+  chiqaradi. Foydalanuvchi shunchaki kamerani burayotganda tasodifan
+  qavat tanlanib qolmasligi uchun bosish boshlangan nuqtani eslab,
+  qo'yib yuborilgunicha 6px dan ko'p siljigan bo'lsa — e'tiborsiz
+  qoldiramiz (bu "drag", "click" emas).
+*/
+let pointerDownAt = null;
+
+window.addEventListener('pointerdown', (event) => {
+  pointerDownAt = { x: event.clientX, y: event.clientY };
+});
+
+window.addEventListener('click', (event) => {
+  if (pointerDownAt) {
+    const moved = Math.hypot(
+      event.clientX - pointerDownAt.x,
+      event.clientY - pointerDownAt.y
+    );
+    if (moved > 6) return; // bu kamera aylantirish edi, tanlov emas
+  }
+
+  const group = pickGroup(event);
+
+  if (!group || group === selectedGroup) {
+    // Bo'sh joyga yoki tanlangan qavatning o'ziga bosildi — asl holat
+    deselectAll();
+  } else {
+    selectGroup(group);
+  }
+});
+
+/* ============================================================
+   9. RESIZE — oyna o'lchami o'zgarganda
    ============================================================ */
 window.addEventListener('resize', () => {
   // Kameraning ekran nisbatini yangilaymiz, aks holda rasm cho'ziladi
@@ -423,7 +642,7 @@ window.addEventListener('resize', () => {
 });
 
 /* ============================================================
-   9. ANIMATSIYA SIKLI (animate loop)
+   10. ANIMATSIYA SIKLI (animate loop)
    Har kadrda (~60 fps) sahnani qayta chizadi.
    ============================================================ */
 function animate() {
@@ -432,6 +651,19 @@ function animate() {
   // Damping (inersiya) yoqilgan bo'lsa, har kadrda update() chaqirish SHART,
   // aks holda silliq harakat ishlamaydi
   controls.update();
+
+  // Tanlash/xiralashtirish tween'larini yangilaymiz
+  updateTweens(performance.now());
+
+  /*
+    Hover masshtabi: har guruh o'z targetScale (1 yoki 1.03) tomon
+    har kadrda 15% yaqinlashadi — bu oddiy eksponensial lerp, keskin
+    sakrashsiz yumshoq "nafas olish" effekti beradi.
+  */
+  interactiveGroups.forEach((group) => {
+    const s = THREE.MathUtils.lerp(group.scale.x, group.userData.targetScale, 0.15);
+    group.scale.setScalar(s);
+  });
 
   renderer.render(scene, camera);
 }
