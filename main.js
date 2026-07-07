@@ -184,94 +184,119 @@ function createHouse() {
   });
 
   /*
-    Katta derazalarning O'ZINING oynasi — yarim shaffof: orqadagi ichki
-    siluetlar "parda ortidan" xira ko'rinadi. Emissive ataylab pasaytirilgan
-    (0.3), aks holda oynaning o'z nuri ichkaridagi manzarani yuvib yuborardi.
-    glassMaterial (0.85, xira emas) eshik darchasi va xat tirqishi kabi
-    mayda, "ichi ko'rinmaydigan" nur nuqtalari uchun qoladi.
+    Derazaning "yonib turgan xona" fon paneli — derazadagi eng muhim
+    qatlam: kuchli iliq emissive aynan "ichkarida chiroq yoniq" hissini
+    beradi. Rang (0xffb84d) keyingi bosqichda derazalarga qo'yiladigan
+    haqiqiy yorug'lik manbalari (PointLight) bilan BIR XIL oilada bo'lishi
+    kerak — manba va uning ko'rinadigan "shishasi" birga ishlaydi.
   */
-  const windowGlassMaterial = new THREE.MeshStandardMaterial({
-    color: 0x2a1a0a,
-    emissive: 0xffb75e,
-    emissiveIntensity: 0.3,
-    transparent: true,
-    opacity: 0.65
+  const glowPanelMaterial = new THREE.MeshStandardMaterial({
+    color: 0xffcc77,
+    emissive: 0xffb84d,
+    emissiveIntensity: 1.2
   });
 
   /*
-    Ichki manzara materiallari. Maqsad fotorealizm emas — "kimdir uyda"
-    hissi: iliq xona foni ustida to'q siluetlar. MeshBasicMaterial ataylab
-    tanlangan: yorug'likka bog'lanmaydi (siluet doim bir xil o'qiladi)
-    va toon materialdan arzonroq.
+    Shisha qatlami — iliq sarg'ish-oq, yarim shaffof va sal yaltiroq
+    (roughness 0.2): orqadagi porloq fon va siluetlar biroz xiralashib
+    ko'rinadi, sirtida esa yorug'lik aksi o'ynaydi — "shisha" hissi
+    aynan shu ikkisining qo'shilishidan keladi.
   */
-  const roomMaterial = new THREE.MeshBasicMaterial({ color: 0x3b2214 });      // xona foni — iliq to'q jigarrang
-  const silhouetteMaterial = new THREE.MeshBasicMaterial({ color: 0x160d08 }); // mebel siluetlari — deyarli qora
-  // Stol lampasi — xonadagi asosiy "hayot" nuqtasi, iliq nur sochadi
+  const glassPaneMaterial = new THREE.MeshStandardMaterial({
+    color: 0xffe9b3,
+    transparent: true,
+    opacity: 0.6,
+    roughness: 0.2,
+    metalness: 0
+  });
+
+  /*
+    Mebel siluetlari — porloq fon USTIDA deyarli qora shakllar.
+    MeshBasicMaterial ataylab: yorug'likka bog'lanmaydi, siluet har
+    burchakdan bir xil "qora kontur" bo'lib o'qiladi.
+  */
+  const silhouetteMaterial = new THREE.MeshBasicMaterial({ color: 0x160d08 });
+  // Stol lampasi — porloq fondan ham yorqinroq iliq nuqta
   const lampGlowMaterial = new THREE.MeshStandardMaterial({
     color: 0x2a1a0a,
     emissive: 0xffc87a,
     emissiveIntensity: 1.35
   });
-  // Noutbuk ekrani — xira sovuq-ko'k nur (kodlash tungi sessiyasi!)
+  // Noutbuk ekrani — sovuq-ko'k nur, iliq deraza fonida darhol ajralib turadi
   const screenGlowMaterial = new THREE.MeshStandardMaterial({
     color: 0x081020,
     emissive: 0x4d8dff,
     emissiveIntensity: 0.7
   });
 
-  const frameMaterial = toon(0xfff4e0); // deraza/eshik hoshiyalari — oq-krem
-  const trimMaterial = toon(0x8a5a3a);  // qavatlar orasidagi karniz — jigarrang
+  // Deraza hoshiyalari — to'q yog'och: och krem/qum devorlardan aniq
+  // ajralib turadi (kontrast), eshik va karniz palitrasiga mos
+  const frameMaterial = toon(0x5e3a1f);
+  const trimMaterial = toon(0x8a5a3a); // qavatlar orasidagi karniz — jigarrang
 
   /*
-    Deraza endi yassi panel emas — "diorama qutisi".
-    Sabab: devorlar yaxlit BoxGeometry, ichida haqiqiy xona yo'q. Obyektni
-    devor ICHIGA qo'ysak, devorning old yuzasi uni to'sib qo'yadi. Shuning
-    uchun har deraza o'zi bilan kichik chuqurlik olib keladi:
+    Deraza — devor yuzasiga yopishgan yupqa qatlamli "sendvich".
+    (Devor yaxlit BoxGeometry bo'lgani uchun qatlamlarni devor ICHIGA
+    botirib bo'lmaydi — old yuzasi to'sib qo'yadi; shuning uchun hammasi
+    yuzaning ustida, millimetrik masofalarda teriladi.)
 
-      orqa panel (xona foni) → siluetlar → yarim shaffof oyna
-      z = -0.17                z ≈ -0.1     z = +0.17
+      z=0.012  porloq panel — "chiroq yoniq" nurining o'zi
+      z=0.05   siluetlar    — createWindowInterior; porloq fon ustida qora shakllar
+      z=0.095  shisha       — yarim shaffof, sal yaltiroq qatlam
+      z=0.085  hoshiya      — 4 yupqa planka, shisha atrofida faqat kontur
 
-    Hoshiya to'rtta alohida planka (yaxlit box emas!) — aks holda hoshiyaning
-    o'zi ham siluetlarni to'sardi. Guruh devor yuzasidan WINDOW_DEPTH/2 ga
-    chiqarib joylashtiriladi, shunda orqa panel devor yuzasiga yopishadi.
+    Eng bo'rtgan nuqta bor-yo'g'i ~0.11 — karnizning o'zi (0.175) dan ham
+    kam, shuning uchun deraza devor bilan deyarli bir tekis o'qiladi.
   */
-  const WINDOW_DEPTH = 0.4;
+  const FRAME_DEPTH = 0.05; // hoshiya kontur bo'lib qoladi, qalin box emas
+  const GLOW_Z = 0.012;
+  const GLASS_Z = 0.095;
+  const FRAME_Z = 0.085;
 
-  function createWindow(width, height) {
+  function createWindow(wallGroup, position, size) {
+    const { width, height } = size;
     const win = new THREE.Group();
-    const t = 0.09; // hoshiya plankasining qalinligi
+    win.position.copy(position); // guruh asli devor YUZASIDA turadi
 
+    // 1-qatlam: porloq fon paneli
+    const glow = new THREE.Mesh(
+      new THREE.BoxGeometry(width - 0.14, height - 0.14, 0.02),
+      glowPanelMaterial
+    );
+    glow.name = 'glow'; // keyin pulse'ga ulash uchun nom bilan topiladi
+    glow.position.z = GLOW_Z;
+
+    // 2-qatlam (siluetlar) createWindowInterior orqali alohida qo'shiladi
+
+    // 3-qatlam: shisha
+    const glass = new THREE.Mesh(
+      new THREE.BoxGeometry(width - 0.12, height - 0.12, 0.015),
+      glassPaneMaterial
+    );
+    glass.name = 'glass';
+    glass.position.z = GLASS_Z;
+
+    // Hoshiya: to'rtta yupqa planka — yaxlit box emas, aks holda
+    // hoshiyaning o'zi orqadagi qatlamlarni to'sib qo'yardi
+    const t = 0.09; // planka yuz kengligi
     const top = new THREE.Mesh(
-      new THREE.BoxGeometry(width, t, WINDOW_DEPTH),
+      new THREE.BoxGeometry(width, t, FRAME_DEPTH),
       frameMaterial
     );
-    top.position.y = height / 2 - t / 2;
+    top.position.set(0, height / 2 - t / 2, FRAME_Z);
     const bottom = top.clone();
     bottom.position.y = -(height / 2 - t / 2);
 
     const left = new THREE.Mesh(
-      new THREE.BoxGeometry(t, height - 2 * t, WINDOW_DEPTH),
+      new THREE.BoxGeometry(t, height - 2 * t, FRAME_DEPTH),
       frameMaterial
     );
-    left.position.x = -(width / 2 - t / 2);
+    left.position.set(-(width / 2 - t / 2), 0, FRAME_Z);
     const right = left.clone();
     right.position.x = width / 2 - t / 2;
 
-    // Xona foni — usiz oynadan devorning krem tashqi yuzasi ko'rinib qolardi
-    const back = new THREE.Mesh(
-      new THREE.BoxGeometry(width - 0.06, height - 0.06, 0.05),
-      roomMaterial
-    );
-    back.position.z = -WINDOW_DEPTH / 2 + 0.03;
-
-    const glass = new THREE.Mesh(
-      new THREE.BoxGeometry(width - 0.16, height - 0.16, 0.05),
-      windowGlassMaterial
-    );
-    glass.name = 'glass'; // keyin pulse'ga ulash uchun nom bilan topiladi
-    glass.position.z = WINDOW_DEPTH / 2 - 0.03;
-
-    win.add(top, bottom, left, right, back, glass);
+    win.add(glow, glass, top, bottom, left, right);
+    wallGroup.add(win);
     return win;
   }
 
@@ -336,8 +361,8 @@ function createHouse() {
       /*
         Pulse metadata: animate() bu belgini ko'rib emissiveIntensity'ni
         sinus bo'yicha tebrantiradi. Barcha 'about' lampalari va 1-qavat
-        oynalari BIR XIL speed/phase oladi — butun qavat go'yo bitta
-        chiroqdan yoritilgandek sinxron "nafas oladi".
+        derazalarining porloq panellari BIR XIL speed/phase oladi — butun
+        qavat go'yo bitta chiroqdan yoritilgandek sinxron "nafas oladi".
       */
       lampShade.userData.pulse = { base: 1.35, amp: 0.35, speed: 1.3, phase: 0 };
       interior.add(lampBase, lampStem, lampShade);
@@ -422,9 +447,14 @@ function createHouse() {
       interior.add(jar, box1, box2, tool, toolHead);
     }
 
-    // Manzara orqa panelga yaqin turadi — oynadan qarasangiz chuqurlik seziladi
-    interior.position.z = -0.05;
-    interior.scale.setScalar(scale);
+    /*
+      Manzara porloq fon (z=0.012) va shisha (z=0.095) ORASIDA turadi.
+      Z o'qi bo'yicha 0.35 ga siqiladi: mebel shakllari asli 0.1-0.16
+      chuqur, yassilanmasa shishani teshib chiqardi. Siluetga chuqurlik
+      baribir kerak emas — porloq fonda faqat kontur o'qiladi.
+    */
+    interior.position.z = 0.05;
+    interior.scale.set(scale, scale, scale * 0.35);
     win.add(interior);
     return interior;
   }
@@ -478,34 +508,32 @@ function createHouse() {
   doorStep.position.set(0, 0.06, FLOOR1_D / 2 + 0.25);
   floor1.add(doorStep);
 
-  /*
-    Old derazalar — eshikning ikki yonida.
-    Diraza guruhi devor yuzasidan WINDOW_DEPTH/2 ga chiqariladi —
-    diorama qutisining orqa paneli aynan devor yuzasiga tegib turadi.
-  */
-  const win1Left = createWindow(0.9, 1.0);
-  win1Left.position.set(-1.45, 1.35, FLOOR1_D / 2 + WINDOW_DEPTH / 2);
-  const win1Right = createWindow(0.9, 1.0);
-  win1Right.position.set(1.45, 1.35, FLOOR1_D / 2 + WINDOW_DEPTH / 2);
-  floor1.add(win1Left, win1Right);
+  // Old derazalar — eshikning ikki yonida, devor yuzasi bilan bir tekis
+  const WIN1_SIZE = { width: 0.9, height: 1.0 };
+  const win1Left = createWindow(
+    floor1, new THREE.Vector3(-1.45, 1.35, FLOOR1_D / 2), WIN1_SIZE
+  );
+  const win1Right = createWindow(
+    floor1, new THREE.Vector3(1.45, 1.35, FLOOR1_D / 2), WIN1_SIZE
+  );
 
   // Yon derazalar (chap va o'ng devorlarda bittadan)
-  const win1SideR = createWindow(0.9, 1.0);
+  const win1SideR = createWindow(
+    floor1, new THREE.Vector3(FLOOR1_W / 2, 1.35, 0), WIN1_SIZE
+  );
   win1SideR.rotation.y = Math.PI / 2;
-  win1SideR.position.set(FLOOR1_W / 2 + WINDOW_DEPTH / 2, 1.35, 0);
-  const win1SideL = createWindow(0.9, 1.0);
+  const win1SideL = createWindow(
+    floor1, new THREE.Vector3(-FLOOR1_W / 2, 1.35, 0), WIN1_SIZE
+  );
   win1SideL.rotation.y = -Math.PI / 2;
-  win1SideL.position.set(-(FLOOR1_W / 2 + WINDOW_DEPTH / 2), 1.35, 0);
-  floor1.add(win1SideR, win1SideL);
 
   // Har deraza ortida — kutubxona burchagi va yonib turgan lampa
-  const floor1Windows = [win1Left, win1Right, win1SideR, win1SideL];
-  floor1Windows.forEach((win) => {
+  [win1Left, win1Right, win1SideR, win1SideL].forEach((win) => {
     createWindowInterior(win, 'about');
-    // Oynaning tashqi nuri lampalar bilan bir maromda pulse qiladi —
-    // speed/phase lampanikiga aynan mos (createWindowInterior ichiga qarang)
-    win.getObjectByName('glass').userData.pulse = {
-      base: 0.3, amp: 0.12, speed: 1.3, phase: 0
+    // Derazaning porloq fon paneli lampalar bilan bir maromda pulse
+    // qiladi — speed/phase lampanikiga aynan mos
+    win.getObjectByName('glow').userData.pulse = {
+      base: 1.2, amp: 0.3, speed: 1.3, phase: 0
     };
   });
 
@@ -535,20 +563,23 @@ function createHouse() {
   floor2.add(trim2);
 
   // Old tomonda ikkita deraza
-  const win2Left = createWindow(0.85, 0.95);
-  win2Left.position.set(-0.95, 1.15, FLOOR2_D / 2 + WINDOW_DEPTH / 2);
-  const win2Right = createWindow(0.85, 0.95);
-  win2Right.position.set(0.95, 1.15, FLOOR2_D / 2 + WINDOW_DEPTH / 2);
-  floor2.add(win2Left, win2Right);
+  const WIN2_SIZE = { width: 0.85, height: 0.95 };
+  const win2Left = createWindow(
+    floor2, new THREE.Vector3(-0.95, 1.15, FLOOR2_D / 2), WIN2_SIZE
+  );
+  const win2Right = createWindow(
+    floor2, new THREE.Vector3(0.95, 1.15, FLOOR2_D / 2), WIN2_SIZE
+  );
 
   // Yon derazalar
-  const win2SideR = createWindow(0.85, 0.95);
+  const win2SideR = createWindow(
+    floor2, new THREE.Vector3(FLOOR2_W / 2, 1.15, 0), WIN2_SIZE
+  );
   win2SideR.rotation.y = Math.PI / 2;
-  win2SideR.position.set(FLOOR2_W / 2 + WINDOW_DEPTH / 2, 1.15, 0);
-  const win2SideL = createWindow(0.85, 0.95);
+  const win2SideL = createWindow(
+    floor2, new THREE.Vector3(-FLOOR2_W / 2, 1.15, 0), WIN2_SIZE
+  );
   win2SideL.rotation.y = -Math.PI / 2;
-  win2SideL.position.set(-(FLOOR2_W / 2 + WINDOW_DEPTH / 2), 1.15, 0);
-  floor2.add(win2SideR, win2SideL);
 
   // 2-qavat — ish xonasi: har deraza ortida stol, noutbuk va ko'k ekran nuri
   [win2Left, win2Right, win2SideR, win2SideL].forEach((win) => {
@@ -586,36 +617,33 @@ function createHouse() {
   roof.add(roofMesh);
 
   /*
-    Old frontondagi dumaloq chordoq darchasi — endi u ham mini-diorama:
-    orqa disk (xona foni) → asboblar silueti → yarim shaffof oyna →
-    old tomonda halqa hoshiya. Ichidagi manzara — 'skills' turi, lekin
-    darcha kichik bo'lgani uchun 0.5 masshtabda.
+    Old frontondagi dumaloq chordoq darchasi — to'rtburchak derazalardagi
+    qatlamli mantiqning aynan o'zi, faqat CircleGeometry bilan:
+    porloq doira → 'skills' siluetlari (0.5 masshtab) → yarim shaffof
+    shisha doira → halqa hoshiya ("illyuminator" ko'rinishi).
   */
   const atticWindow = new THREE.Group();
-  atticWindow.position.set(0, 0.62, ROOF_D / 2 + 0.14);
+  atticWindow.position.set(0, 0.62, ROOF_D / 2);
 
-  const atticBack = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.28, 0.28, 0.05, 24),
-    roomMaterial
+  const atticGlow = new THREE.Mesh(
+    new THREE.CircleGeometry(0.24, 24),
+    glowPanelMaterial
   );
-  atticBack.rotation.x = Math.PI / 2; // diskni old tomonga qaratamiz
-  atticBack.position.z = -0.12;
+  atticGlow.position.z = GLOW_Z;
 
   const atticGlass = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.25, 0.25, 0.04, 24),
-    windowGlassMaterial
+    new THREE.CircleGeometry(0.26, 24),
+    glassPaneMaterial
   );
-  atticGlass.rotation.x = Math.PI / 2;
-  atticGlass.position.z = 0.06;
+  atticGlass.position.z = GLASS_Z;
 
-  // Halqa hoshiya — darchaga "illyuminator" ko'rinishi beradi
   const atticRim = new THREE.Mesh(
-    new THREE.TorusGeometry(0.27, 0.05, 10, 24),
+    new THREE.TorusGeometry(0.27, 0.04, 10, 24),
     frameMaterial
   );
-  atticRim.position.z = 0.08;
+  atticRim.position.z = FRAME_Z;
 
-  atticWindow.add(atticBack, atticGlass, atticRim);
+  atticWindow.add(atticGlow, atticGlass, atticRim);
   createWindowInterior(atticWindow, 'skills', 0.5);
   roof.add(atticWindow);
 
