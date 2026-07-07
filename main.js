@@ -957,9 +957,10 @@ enhanceGround();
 /* ============================================================
    9. JONLILIK — qushlar, shamol, tutun, bulutlar
    Sahnani "muzlagan rasm"dan "yashayotgan olam"ga aylantiruvchi
-   mayda harakatlar. Hammasi ATAYLAB arzon: jami ~12 mesh + 18 ta
-   nuqta (particle) + 11 ta pozitsiya tebranishi — har kadrda faqat
-   bir hovuch sinus hisobi, birorta ham yangi obyekt yaratilmaydi.
+   mayda harakatlar. Hammasi ATAYLAB arzon: ~12 mesh + 2 ta Points
+   obyekti (18 tutun zarrasi + 130 yulduz, har biri bitta draw call) +
+   11 ta pozitsiya tebranishi — har kadrda faqat sinus hisoblari,
+   birorta ham yangi obyekt yaratilmaydi.
    Barcha yangilanish bitta updateAmbientAnimations(time) da jamlangan,
    uni animate() chaqiradi.
    ============================================================ */
@@ -1169,7 +1170,96 @@ const CLOUD_WRAP_X = 50; // shu chegaradan chiqqan bulut narigi tomondan qaytadi
   });
 });
 
-/* ---------- 9.5 Markaziy yangilovchi ----------
+/* ---------- 9.5 Yulduzlar ----------
+   130 yulduz — bitta THREE.Points, bitta draw call. Katta radiusli
+   gumbaz (dome) bo'ylab sochilgan; radius (78) tepaliklardan ancha
+   narida, shuning uchun ufqqa yaqin yulduzlar tog' siluetlari ortiga
+   tabiiy ravishda yashirinadi (depth test o'zi hal qiladi).
+
+   Ikki xil harakat:
+   - hammasi mayin miltillaydi (twinkle) — yorqinlik sinus bilan tebranadi;
+   - dastlabki 25 tasi "yashaydi": sekin paydo bo'ladi → porlaydi →
+     so'nadi, va har safar qaytadan tug'ilganda YANGI tasodifiy joyga
+     ko'chadi — osmon jonli, "o'zgaruvchan" bo'lib qoladi.
+
+   Yorqinlik bu yerda ham rang orqali (tutundagi kabi): AdditiveBlending
+   bilan qora rang = ko'rinmas, shuning uchun rangni 0 ga lerp qilish
+   zarrani chindan "o'chiradi".
+*/
+const STAR_COUNT = 130;
+const STAR_RADIUS = 78; // fog(60)dan narida, camera.far(100)dan berida
+
+const starGeometry = new THREE.BufferGeometry();
+starGeometry.setAttribute(
+  'position', new THREE.BufferAttribute(new Float32Array(STAR_COUNT * 3), 3)
+);
+starGeometry.setAttribute(
+  'color', new THREE.BufferAttribute(new Float32Array(STAR_COUNT * 3), 3)
+);
+
+function setRandomStarPosition(index) {
+  const azimuth = Math.random() * Math.PI * 2;
+  /*
+    sin(elevatsiya) kamida 0.12 — yulduz ufqning o'zida turmasin
+    (u yerda baribir tog'/fog bor). Qolgani gumbaz bo'ylab tekis.
+  */
+  const sinElev = 0.12 + Math.random() * 0.88;
+  const cosElev = Math.sqrt(1 - sinElev * sinElev);
+
+  starGeometry.attributes.position.setXYZ(
+    index,
+    Math.cos(azimuth) * cosElev * STAR_RADIUS,
+    sinElev * STAR_RADIUS,
+    Math.sin(azimuth) * cosElev * STAR_RADIUS
+  );
+}
+
+const _starColor = new THREE.Color();
+ambient.stars = { geometry: starGeometry, data: [] };
+
+for (let i = 0; i < STAR_COUNT; i++) {
+  setRandomStarPosition(i);
+
+  // Rang: to'rtdan uchi sovuq oq-ko'kish, qolgani iliq sarg'ish —
+  // haqiqiy osmondagi yulduzlar ham shunday aralash bo'ladi
+  _starColor.setHSL(
+    Math.random() > 0.75 ? 0.12 : 0.62,
+    0.35,
+    0.75 + Math.random() * 0.2
+  );
+  // Har yulduzning o'z "kattaligi" yo'q (PointsMaterial'da size yagona),
+  // shuning uchun xilma-xillik bazaviy yorqinlik orqali beriladi
+  const baseBrightness = 0.55 + Math.random() * 0.45;
+
+  ambient.stars.data.push({
+    r: _starColor.r * baseBrightness,
+    g: _starColor.g * baseBrightness,
+    b: _starColor.b * baseBrightness,
+    twinkleSpeed: 0.8 + Math.random() * 2.2,
+    twinklePhase: Math.random() * Math.PI * 2,
+    cycle: i < 25,                           // "tug'ilib-o'chadiganlar"
+    cycleSpeed: 0.03 + Math.random() * 0.05, // to'liq hayot ~13-33 soniya
+    cycleOffset: Math.random(),
+    lastProgress: 0 // loop qayta boshlanganini (wrap) sezish uchun
+  });
+}
+
+const starMaterial = new THREE.PointsMaterial({
+  size: 2.8,
+  sizeAttenuation: false,        // masofadan qat'i nazar ~3px — mitti nuqta
+  map: createSmokeTexture(),     // o'sha radial gradient — yulduzga ham ideal
+  vertexColors: true,
+  transparent: true,
+  depthWrite: false,
+  blending: THREE.AdditiveBlending, // nur "qo'shiladi" — chekkasiz toza porlash
+  fog: false                     // fog yulduzlarni yutib yubormasin
+});
+
+const stars = new THREE.Points(starGeometry, starMaterial);
+stars.raycast = () => {}; // osmonga bosish tanlovga xalaqit bermasin
+scene.add(stars);
+
+/* ---------- 9.6 Markaziy yangilovchi ----------
    animate() har kadrda shuni chaqiradi. time — sekundlarda. */
 function updateAmbientAnimations(time) {
   // Qushlar: aylana trayektoriya + qanot qoqish
@@ -1227,6 +1317,38 @@ function updateAmbientAnimations(time) {
 
   positions.needsUpdate = true;
   colors.needsUpdate = true;
+
+  // Yulduzlar: miltillash + 25 tasining "hayot davri"
+  const starColors = ambient.stars.geometry.attributes.color;
+  let starMoved = false;
+
+  ambient.stars.data.forEach((s, i) => {
+    // Mayin twinkle: yorqinlik 0.6..1.0 orasida tebranadi
+    let brightness = 0.8 + Math.sin(time * s.twinkleSpeed + s.twinklePhase) * 0.2;
+
+    if (s.cycle) {
+      const progress = (time * s.cycleSpeed + s.cycleOffset) % 1;
+      /*
+        Wrap aniqlandi (progress orqaga sakradi) = yulduz "o'ldi".
+        Aynan shu payt uni yangi tasodifiy joyga ko'chiramiz — u baribir
+        hozir ko'rinmas (brightness≈0), sakrash ko'zga tashlanmaydi.
+      */
+      if (progress < s.lastProgress) {
+        setRandomStarPosition(i);
+        starMoved = true;
+      }
+      s.lastProgress = progress;
+
+      // sin(0..π): 0 → 1 → 0 — sekin tug'iladi, porlaydi, so'nadi
+      brightness *= Math.sin(progress * Math.PI);
+    }
+
+    starColors.setXYZ(i, s.r * brightness, s.g * brightness, s.b * brightness);
+  });
+
+  starColors.needsUpdate = true;
+  // Pozitsiyani faqat kimdir chindan ko'chgan kadrda GPU'ga qayta yuboramiz
+  if (starMoved) ambient.stars.geometry.attributes.position.needsUpdate = true;
 
   /*
     Bulutlar: juda sekin X bo'ylab oqadi. Pozitsiya har kadrda qo'shib
