@@ -774,11 +774,13 @@ function createEnvironment() {
         new THREE.SphereGeometry(0.95, 12, 10),
         leafDark
       );
+      crownMain.name = 'crown'; // shamol tebranishi shu nom bo'yicha topadi
       crownMain.position.y = 1.85;
       const crownTop = new THREE.Mesh(
         new THREE.SphereGeometry(0.6, 12, 10),
         leafEmerald
       );
+      crownTop.name = 'crown';
       crownTop.position.set(0.3, 2.5, 0.2);
       tree.add(crownMain, crownTop);
     } else {
@@ -786,6 +788,7 @@ function createEnvironment() {
         new THREE.ConeGeometry(0.85, 2.2, 9),
         leafDark
       );
+      cone.name = 'crown';
       cone.position.y = 2.1;
       tree.add(cone);
     }
@@ -897,7 +900,8 @@ function createEnvironment() {
   return environment;
 }
 
-scene.add(createEnvironment());
+const environment = createEnvironment();
+scene.add(environment);
 
 /*
   Yer rangini boyitish: bir tekis yashil o'rniga vertex colors.
@@ -951,7 +955,294 @@ function enhanceGround() {
 enhanceGround();
 
 /* ============================================================
-   9. INTERAKTIVLIK — Raycaster: hover va tanlash
+   9. JONLILIK — qushlar, shamol, tutun, bulutlar
+   Sahnani "muzlagan rasm"dan "yashayotgan olam"ga aylantiruvchi
+   mayda harakatlar. Hammasi ATAYLAB arzon: jami ~12 mesh + 18 ta
+   nuqta (particle) + 11 ta pozitsiya tebranishi — har kadrda faqat
+   bir hovuch sinus hisobi, birorta ham yangi obyekt yaratilmaydi.
+   Barcha yangilanish bitta updateAmbientAnimations(time) da jamlangan,
+   uni animate() chaqiradi.
+   ============================================================ */
+
+// Barcha jonli elementlarga havolalar bir joyda — updateAmbientAnimations
+// faqat shu obyekt ustida ishlaydi, sahnani qidirib yurmaydi
+const ambient = { birds: [], crowns: [], clouds: [], smoke: null };
+
+/* ---------- 9.1 Qushlar ----------
+   Kechki osmonda faqat siluet ko'rinadi, shuning uchun material —
+   yorug'likka bog'lanmagan qop-qora MeshBasicMaterial. Har qush:
+   mayda tana + ikki yassi uchburchak qanot (3 vertexli BufferGeometry —
+   bundan ham arzon geometriya bo'lmaydi). */
+
+const birdMaterial = new THREE.MeshBasicMaterial({
+  color: 0x1a1426,
+  side: THREE.DoubleSide // qanot yassi — ikkala tomoni ham ko'rinishi kerak
+});
+
+// direction: +1 o'ng qanot, -1 chap qanot (uchburchak shu tomonga cho'zilgan)
+function createWingGeometry(direction) {
+  const geometry = new THREE.BufferGeometry();
+  const vertices = new Float32Array([
+    0, 0, 0.14,               // tanaga yopishgan old nuqta
+    0, 0, -0.14,              // tanaga yopishgan orqa nuqta
+    direction * 0.5, 0.04, 0  // qanot uchi — sal yuqorida (tabiiy egilish)
+  ]);
+  geometry.setAttribute('position', new THREE.BufferAttribute(vertices, 3));
+  return geometry;
+}
+
+function createBird() {
+  const bird = new THREE.Group();
+
+  const body = new THREE.Mesh(
+    new THREE.BoxGeometry(0.09, 0.07, 0.32),
+    birdMaterial
+  );
+  const wingL = new THREE.Mesh(createWingGeometry(-1), birdMaterial);
+  const wingR = new THREE.Mesh(createWingGeometry(1), birdMaterial);
+
+  bird.add(body, wingL, wingR);
+  return { bird, wingL, wingR };
+}
+
+/*
+  3 ta qush — har biri o'z radiusi, balandligi, tezligi va fazasi bilan
+  uy atrofida aylanadi. Bittasining tezligi manfiy — teskari yo'nalishda
+  uchadi, shunda "gala bo'lib parad qilayotgan" sun'iy ko'rinish yo'qoladi.
+*/
+[
+  { radius: 13, height: 8.5, speed: 0.22, phase: 0 },
+  { radius: 16, height: 10.0, speed: 0.17, phase: 2.4 },
+  { radius: 14.5, height: 9.2, speed: -0.19, phase: 4.4 }
+].forEach((config) => {
+  const { bird, wingL, wingR } = createBird();
+  scene.add(bird);
+  ambient.birds.push({ group: bird, wingL, wingR, ...config });
+});
+
+// lookAt uchun qayta ishlatiladigan vektor — har kadrda new Vector3()
+// yaratib GC (garbage collector)ni bezovta qilmaslik uchun
+const _birdTarget = new THREE.Vector3();
+
+/* ---------- 9.2 Daraxt shoxlarining shamolda tebranishi ----------
+   createTree ichida har barg qismiga name='crown' berilgan edi — shu
+   belgini yig'ib olamiz. Har biriga o'z fazasi: hammasi bir vaqtda
+   emas, navbat bilan "to'lqinlanib" tebranadi. */
+let crownIndex = 0;
+environment.traverse((obj) => {
+  if (obj.name === 'crown') {
+    ambient.crowns.push({
+      mesh: obj,
+      baseX: obj.position.x, // tebranish shu asl nuqta ATROFIDA bo'ladi
+      baseZ: obj.position.z,
+      phase: crownIndex++ * 1.7 // har daraxtga har xil faza
+    });
+  }
+});
+
+/* ---------- 9.3 Mo'ridan tutun ----------
+   THREE.Points — 18 zarra, bitta draw call. Zarralar mo'ri tepasidan
+   spiral bo'ylab ko'tarilib, tepada qaytadan pastdan boshlanadi (loop).
+
+   Nuance: PointsMaterial'da har zarraga alohida opacity berib bo'lmaydi.
+   Shuning uchun "so'nish" rang orqali qilinadi: zarra ko'tarilgani sari
+   rangi och kulrangdan osmon-fog rangiga (0x2f2a55) qarab lerp qilinadi —
+   qorong'i fonda bu xuddi opacity kamayganday ko'rinadi.
+
+   Tutun ROOF group'iga qo'shiladi (sahnaga emas!) — "Skills" tanlanganda
+   tom qanchaga siljisa, tutun ham birga boradi, havoda yolg'iz qolmaydi. */
+const SMOKE_COUNT = 18;
+
+const smokeGeometry = new THREE.BufferGeometry();
+smokeGeometry.setAttribute(
+  'position', new THREE.BufferAttribute(new Float32Array(SMOKE_COUNT * 3), 3)
+);
+smokeGeometry.setAttribute(
+  'color', new THREE.BufferAttribute(new Float32Array(SMOKE_COUNT * 3), 3)
+);
+
+/*
+  Teksturasiz PointsMaterial har zarrani KVADRAT qilib chizadi — tutunga
+  yarashmaydi. Kichik canvas'da radial gradient (markazda oq, chetda
+  shaffof) chizib, undan tekstura yasaymiz — zarralar yumshoq dumaloq
+  "paxta" bo'lib ko'rinadi. Bir marta, bir necha millisekundda bajariladi.
+*/
+function createSmokeTexture() {
+  const size = 64;
+  const canvas = document.createElement('canvas');
+  canvas.width = canvas.height = size;
+
+  const ctx = canvas.getContext('2d');
+  const gradient = ctx.createRadialGradient(
+    size / 2, size / 2, 0,
+    size / 2, size / 2, size / 2
+  );
+  gradient.addColorStop(0, 'rgba(255, 255, 255, 1)');
+  gradient.addColorStop(0.4, 'rgba(255, 255, 255, 0.55)');
+  gradient.addColorStop(1, 'rgba(255, 255, 255, 0)');
+  ctx.fillStyle = gradient;
+  ctx.fillRect(0, 0, size, size);
+
+  return new THREE.CanvasTexture(canvas);
+}
+
+const smokeMaterial = new THREE.PointsMaterial({
+  size: 0.38,
+  map: createSmokeTexture(),
+  vertexColors: true,   // har zarraning o'z rangi — "so'nish" shu orqali
+  transparent: true,
+  opacity: 0.55,
+  depthWrite: false     // shaffof zarralar bir-birini "kesib" tashlamasligi uchun
+});
+
+const smokePoints = new THREE.Points(smokeGeometry, smokeMaterial);
+// Mo'rining tepasi (roof group lokal koordinatalarida): mo'ri (1.2, 1.05, -1.1)
+// markazda, bo'yi 0.9 — demak og'zi y=1.5 da
+smokePoints.position.set(1.2, 1.5, -1.1);
+/*
+  Raycaster Points'ni ham "ko'radi" (threshold bilan) — tutun ustiga
+  kursor kelganda tom hover bo'lib qolmasligi uchun raycast o'chiriladi.
+*/
+smokePoints.raycast = () => {};
+
+house.getObjectByName('roof').add(smokePoints);
+
+ambient.smoke = {
+  geometry: smokeGeometry,
+  // Har zarraning loop ichidagi o'z boshlang'ich nuqtasi va spiral fazasi
+  data: Array.from({ length: SMOKE_COUNT }, (_, i) => ({
+    offset: i / SMOKE_COUNT,
+    phase: i * 2.1
+  }))
+};
+
+const _smokeColor = new THREE.Color();
+const SMOKE_BRIGHT = new THREE.Color(0xb0acc0); // yangi chiqqan tutun — och kulrang
+const SMOKE_FADE = new THREE.Color(0x2f2a55);   // so'nayotgani — osmon/fog rangi
+
+/* ---------- 9.4 Bulutlar ----------
+   Uch cho'zilgan sferadan bitta yassi bulut. fog: false ataylab —
+   bulutlar baland va uzoqda, fog ularni butunlay yutib yuborardi;
+   shaffoflik va xira binafsha-kulrang rang o'zi kifoya. */
+const cloudMaterial = new THREE.MeshBasicMaterial({
+  color: 0x8f88c4,
+  transparent: true,
+  opacity: 0.3,
+  depthWrite: false,
+  fog: false
+});
+
+const cloudBlobGeometry = new THREE.SphereGeometry(1, 8, 6); // hammasi baham ko'radi
+
+function createCloud(x, y, z, scale) {
+  const cloud = new THREE.Group();
+
+  // Markaziy katta blob + ikki yondagi kichigi = klassik cartoon bulut
+  [
+    { px: 0, py: 0, pz: 0, sx: 1.6, sy: 0.5, sz: 0.9 },
+    { px: 1.3, py: 0.1, pz: 0.2, sx: 1.0, sy: 0.38, sz: 0.7 },
+    { px: -1.2, py: 0.05, pz: -0.15, sx: 1.1, sy: 0.4, sz: 0.75 }
+  ].forEach((blob) => {
+    const mesh = new THREE.Mesh(cloudBlobGeometry, cloudMaterial);
+    mesh.position.set(blob.px, blob.py, blob.pz);
+    mesh.scale.set(blob.sx, blob.sy, blob.sz);
+    cloud.add(mesh);
+  });
+
+  cloud.position.set(x, y, z);
+  cloud.scale.setScalar(scale);
+  scene.add(cloud);
+  return cloud;
+}
+
+const CLOUD_WRAP_X = 50; // shu chegaradan chiqqan bulut narigi tomondan qaytadi
+
+[
+  { x: -20, y: 14, z: -12, scale: 1.6, speed: 0.35 },
+  { x: 8, y: 16.5, z: 6, scale: 1.2, speed: 0.22 },
+  { x: 28, y: 13, z: -4, scale: 1.0, speed: 0.28 }
+].forEach((config) => {
+  ambient.clouds.push({
+    group: createCloud(config.x, config.y, config.z, config.scale),
+    baseX: config.x, // harakat mutlaq vaqtdan hisoblanadi — boshlang'ich nuqta kerak
+    speed: config.speed
+  });
+});
+
+/* ---------- 9.5 Markaziy yangilovchi ----------
+   animate() har kadrda shuni chaqiradi. time — sekundlarda. */
+function updateAmbientAnimations(time) {
+  // Qushlar: aylana trayektoriya + qanot qoqish
+  ambient.birds.forEach((b) => {
+    const angle = time * b.speed + b.phase;
+    const x = Math.cos(angle) * b.radius;
+    const z = Math.sin(angle) * b.radius;
+    // Balandlik ham sal to'lqinlanadi — qush "suzib" uchayotganday
+    const y = b.height + Math.sin(time * 0.8 + b.phase) * 0.5;
+    b.group.position.set(x, y, z);
+
+    /*
+      Qush qayoqqa qarashi kerak? Aylana harakat tangensi:
+      (cos, sin)' = (-sin, cos). Tezlik manfiy qushlarda yo'nalish
+      teskari — Math.sign shuni hisobga oladi.
+    */
+    const dir = Math.sign(b.speed);
+    _birdTarget.set(x - Math.sin(angle) * dir, y, z + Math.cos(angle) * dir);
+    b.group.lookAt(_birdTarget);
+
+    // Qanotlar qarama-qarshi yo'nalishda tez qoqiladi
+    const flap = Math.sin(time * 9 + b.phase * 7) * 0.55;
+    b.wingR.rotation.z = flap;
+    b.wingL.rotation.z = -flap;
+  });
+
+  // Daraxt shoxlari: asl nuqta atrofida juda mayda tebranish.
+  // Amplituda ataylab kichik (0.035) — "bo'ron" emas, yengil epkin.
+  ambient.crowns.forEach((c) => {
+    c.mesh.position.x = c.baseX + Math.sin(time * 1.3 + c.phase) * 0.035;
+    c.mesh.position.z = c.baseZ + Math.cos(time * 1.1 + c.phase) * 0.02;
+  });
+
+  // Tutun: har zarra 0..1 progress bo'ylab loop qiladi
+  const positions = ambient.smoke.geometry.attributes.position;
+  const colors = ambient.smoke.geometry.attributes.color;
+
+  ambient.smoke.data.forEach((p, i) => {
+    // % 1 — zarra tepaga yetganda avtomatik boshiga qaytadi
+    const progress = (time * 0.1 + p.offset) % 1;
+    // Ko'tarilgani sari spiral kengayadi — tutun "tarqalishi"
+    const spread = 0.08 + progress * 0.4;
+
+    positions.setXYZ(
+      i,
+      Math.sin(progress * 7 + p.phase) * spread,
+      progress * 2.4,
+      Math.cos(progress * 5 + p.phase) * spread * 0.7
+    );
+
+    // "So'nish": rang osmon rangiga singib boradi (izoh 9.3 da)
+    _smokeColor.lerpColors(SMOKE_BRIGHT, SMOKE_FADE, progress);
+    colors.setXYZ(i, _smokeColor.r, _smokeColor.g, _smokeColor.b);
+  });
+
+  positions.needsUpdate = true;
+  colors.needsUpdate = true;
+
+  /*
+    Bulutlar: juda sekin X bo'ylab oqadi. Pozitsiya har kadrda qo'shib
+    borilmaydi — mutlaq vaqtdan hisoblanadi (144Hz ekranda bulut 60Hz
+    dagidan tez oqib ketmasligi uchun). Modul arifmetikasi wrap-around'ni
+    o'zi bajaradi: chegaradan chiqqan bulut narigi tomondan kirib keladi.
+  */
+  const range = CLOUD_WRAP_X * 2;
+  ambient.clouds.forEach((c) => {
+    const traveled = c.baseX + time * c.speed + CLOUD_WRAP_X;
+    c.group.position.x = ((traveled % range) + range) % range - CLOUD_WRAP_X;
+  });
+}
+
+/* ============================================================
+   10. INTERAKTIVLIK — Raycaster: hover va tanlash
    Mexanika:
    - hover:  kursor qavat ustida → cursor 'pointer' + qavat 1.03x
              kattalashadi (silliq lerp bilan, animate() ichida)
@@ -1240,7 +1531,7 @@ window.addEventListener('keydown', (event) => {
 });
 
 /* ============================================================
-   10. RESIZE — oyna o'lchami o'zgarganda
+   11. RESIZE — oyna o'lchami o'zgarganda
    ============================================================ */
 window.addEventListener('resize', () => {
   // Kameraning ekran nisbatini yangilaymiz, aks holda rasm cho'ziladi
@@ -1253,7 +1544,7 @@ window.addEventListener('resize', () => {
 });
 
 /* ============================================================
-   11. ANIMATSIYA SIKLI (animate loop)
+   12. ANIMATSIYA SIKLI (animate loop)
    Har kadrda (~60 fps) sahnani qayta chizadi.
    ============================================================ */
 function animate() {
@@ -1275,6 +1566,9 @@ function animate() {
   pulsingMaterials.forEach((p) => {
     p.material.emissiveIntensity = p.base + Math.sin(time * p.speed + p.phase) * p.amp;
   });
+
+  // Jonlilik: qushlar, daraxt tebranishi, tutun, bulutlar (9-bo'lim)
+  updateAmbientAnimations(time);
 
   /*
     Hover masshtabi: har guruh o'z targetScale (1 yoki 1.03) tomon
