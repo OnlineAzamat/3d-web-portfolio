@@ -410,7 +410,253 @@ const house = createHouse();
 scene.add(house);
 
 /* ============================================================
-   8. INTERAKTIVLIK — Raycaster: hover va tanlash
+   8. ATROF-MUHIT (Environment)
+   Uy endi "bo'shliqda muallaq" emas — jonli hovli ichida turadi:
+   daraxtlar, tosh yo'lka, hovli chetidagi butalar, uzoqdagi tepalik
+   siluetlari va rang-barang yer.
+
+   MUHIM: bu yerdagi HECH BIR obyekt raycaster'ga tushmaydi.
+   pickGroup() faqat interactiveGroups (uy qavatlari) ichida qidiradi,
+   shuning uchun daraxt yoki toshga bosilsa card ochilmaydi — bu
+   ataylab shunday: butun atrof faqat dekoratsiya.
+   ============================================================ */
+
+/*
+  Deterministik "tasodifiylik" (oddiy LCG generator).
+  Math.random() o'rniga shuni ishlatamiz: har safar sahifa yangilanganda
+  daraxtlar, toshlar va butalar AYNAN bir xil joyda turadi — sahna
+  "sakrab" o'zgarmaydi, lekin joylashuv baribir tabiiy-tartibsiz ko'rinadi.
+*/
+function createSeededRandom(seed) {
+  let s = seed;
+  return () => {
+    s = (s * 9301 + 49297) % 233280;
+    return s / 233280;
+  };
+}
+
+function createEnvironment() {
+  const environment = new THREE.Group();
+  environment.name = 'environment';
+
+  const gradientMap = createToonGradientMap();
+  const toon = (color) => new THREE.MeshToonMaterial({ color, gradientMap });
+  const rand = createSeededRandom(7);
+
+  /*
+    Materiallar oldindan, BIR marta yaratiladi va barcha nusxalar
+    o'rtasida baham ko'riladi — 5 ta daraxt + o'nlab buta/tosh uchun
+    alohida material yaratish GPU'ga ortiqcha yuk bo'lardi.
+  */
+  const trunkMaterial = toon(0x6b4226);  // daraxt tanasi — jigarrang
+  const leafDark = toon(0x1d5c33);       // to'q yashil barglar
+  const leafEmerald = toon(0x2e7d4f);    // zumrad tusli barglar (ikkinchi qatlam)
+  const stoneMaterial = toon(0xb8b0a0);  // yo'lka toshlari — och kulrang-bej
+  const bushMaterial = toon(0x1c4a2a);   // butalar — eng to'q yashil
+
+  /* ---------- Daraxtlar ----------
+     Past-poly cartoon daraxt: silindr tana + ustida sfera yoki konus
+     shaklidagi "barg bulutlari". Har chaqiriq turli joylashuv va
+     masshtab bilan yangi nusxa qaytaradi. */
+  function createTree(x, z, scale) {
+    const tree = new THREE.Group();
+
+    const trunk = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.16, 0.26, 1.3, 8),
+      trunkMaterial
+    );
+    trunk.position.y = 0.65;
+    tree.add(trunk);
+
+    /*
+      Ikki xil daraxt turi navbatlashadi:
+      - yumaloq (ikki sfera — katta pastki + kichik "cho'qqi") — bargli daraxt
+      - konussimon (bitta cho'zilgan konus) — archa
+      Turlar aralashligi hovlini bir xillikdan qutqaradi.
+    */
+    if (rand() > 0.45) {
+      const crownMain = new THREE.Mesh(
+        new THREE.SphereGeometry(0.95, 12, 10),
+        leafDark
+      );
+      crownMain.position.y = 1.85;
+      const crownTop = new THREE.Mesh(
+        new THREE.SphereGeometry(0.6, 12, 10),
+        leafEmerald
+      );
+      crownTop.position.set(0.3, 2.5, 0.2);
+      tree.add(crownMain, crownTop);
+    } else {
+      const cone = new THREE.Mesh(
+        new THREE.ConeGeometry(0.85, 2.2, 9),
+        leafDark
+      );
+      cone.position.y = 2.1;
+      tree.add(cone);
+    }
+
+    tree.position.set(x, 0, z);
+    tree.scale.setScalar(scale);
+    tree.rotation.y = rand() * Math.PI * 2; // har biri o'z tomoniga "qaragan"
+    return tree;
+  }
+
+  // Uydan yiroqroqda, yo'lka (x≈0..2, z=3..9) va pochta qutisiga tegmaydigan joylarda
+  environment.add(
+    createTree(-6.5, 2.5, 1.15),
+    createTree(-8.5, -3.5, 1.4),
+    createTree(6.5, -5.5, 1.0),
+    createTree(9.0, 2.0, 1.25),
+    createTree(-4.5, 8.0, 0.85)
+  );
+
+  /* ---------- Tosh yo'lka ----------
+     Eshikdan (z≈2.7) boshlab kameraning boshlang'ich tomoni sari
+     cho'ziladi va oxiriga borib sekin +x ga (kamera turgan tarafga)
+     buriladi — bu egri chiziq tomoshabin nigohini eshikka olib boradi.
+     Har tosh biroz turlicha o'lchamda va qiya burchakda — qo'lda
+     terilgan tabiiy yo'lka taassurotini beradi. */
+  const STONE_COUNT = 9;
+  for (let i = 0; i < STONE_COUNT; i++) {
+    const t = i / (STONE_COUNT - 1); // 0 (eshik oldi) .. 1 (yo'lka oxiri)
+    const stone = new THREE.Mesh(
+      new THREE.BoxGeometry(
+        0.75 + rand() * 0.25, // har toshning eni har xil
+        0.08,                 // yassi plita
+        0.5 + rand() * 0.15
+      ),
+      stoneMaterial
+    );
+    stone.position.set(
+      t * t * 2.0 + (rand() - 0.5) * 0.35, // kvadratik drift: oxirida +x ga buriladi
+      0.04,                                 // yerdan sal ko'tarilgan — z-fighting oldini oladi
+      3.0 + t * 6.5
+    );
+    stone.rotation.y = (rand() - 0.5) * 0.5; // ±14° gacha tartibsiz burchak
+    environment.add(stone);
+  }
+
+  /* ---------- Butalar (past to'siq) ----------
+     Hovlining orqa va ikki yon chetida qator butalar — "bu yerdan
+     hovli tugaydi" degan yumshoq chegara hissi. Old tomon (+z, yo'lka
+     chiqadigan taraf) ataylab ochiq qoldirilgan — kirish taklifi. */
+  function createBush(x, z, scale) {
+    const bush = new THREE.Group();
+    // 2-3 ta bir-biriga kirishib turgan sfera = bitta g'uj buta
+    const blobs = 2 + Math.floor(rand() * 2);
+    for (let i = 0; i < blobs; i++) {
+      const r = 0.3 + rand() * 0.18;
+      const blob = new THREE.Mesh(
+        new THREE.SphereGeometry(r, 10, 8),
+        bushMaterial
+      );
+      blob.position.set(
+        (rand() - 0.5) * 0.5,
+        r * 0.75, // pastroq "cho'kkan" — sferaning bir qismi yerda
+        (rand() - 0.5) * 0.4
+      );
+      bush.add(blob);
+    }
+    bush.position.set(x, 0, z);
+    bush.scale.setScalar(scale);
+    return bush;
+  }
+
+  const YARD = 7.4; // hovli chegarasi (uy markazidan)
+  for (let i = -3; i <= 3; i++) {
+    const step = i * 1.9;
+    // orqa qator (z = -YARD)
+    environment.add(createBush(step + (rand() - 0.5) * 0.6, -YARD, 0.8 + rand() * 0.5));
+    // chap va o'ng qatorlar (x = ±YARD)
+    environment.add(createBush(-YARD, step + (rand() - 0.5) * 0.6, 0.8 + rand() * 0.5));
+    environment.add(createBush(YARD, step + (rand() - 0.5) * 0.6, 0.8 + rand() * 0.5));
+  }
+
+  /* ---------- Uzoqdagi tepaliklar ----------
+     Kamera diapazoni (maxDistance=25) dan ancha narida, fog (15..60)
+     ichiga chuqur botgan past-poly konuslar. MeshBasicMaterial ataylab:
+     yorug'lik hisobi keraksiz — bular faqat siluet, fog ularni osmon
+     rangiga o'zi qorishtiradi va sahnaga chuqurlik beradi. */
+  const hillMaterial = new THREE.MeshBasicMaterial({ color: 0x3a3468 });
+  const HILL_COUNT = 8;
+  for (let i = 0; i < HILL_COUNT; i++) {
+    // to'liq aylana bo'ylab, biroz notekis qadam bilan
+    const angle = (i / HILL_COUNT) * Math.PI * 2 + (rand() - 0.5) * 0.5;
+    const distance = 33 + rand() * 6; // yer tekisligi (40) ichida qoladi
+    const height = 3.5 + rand() * 3.5;
+
+    const hill = new THREE.Mesh(
+      // 5 qirrali konus — "low-poly tog'" silueti uchun yetarli
+      new THREE.ConeGeometry(7 + rand() * 6, height, 5),
+      hillMaterial
+    );
+    hill.position.set(
+      Math.cos(angle) * distance,
+      height / 2, // konus markazdan o'lchanadi — asosini yerga qo'yamiz
+      Math.sin(angle) * distance
+    );
+    hill.rotation.y = rand() * Math.PI;
+    environment.add(hill);
+  }
+
+  return environment;
+}
+
+scene.add(createEnvironment());
+
+/*
+  Yer rangini boyitish: bir tekis yashil o'rniga vertex colors.
+  Formula oddiy: uyga yaqin joy ochroq (chiroq yorug'i tushgandek),
+  chekkalar to'qroq (qorong'ilikka singib ketadi), ustiga sinuslardan
+  yasalgan arzon "noise" — maysa dog'-dog' bo'lib, jonli ko'rinadi.
+  Shader yozilmagan — hammasi bir marta, geometriya darajasida hisoblanadi.
+*/
+function enhanceGround() {
+  // Vertex colors ko'rinishi uchun tekislik segmentlarga bo'linadi:
+  // har segment burchagida o'z rangi bo'ladi, oralari silliq aralashadi
+  const geometry = new THREE.PlaneGeometry(80, 80, 64, 64);
+
+  const positions = geometry.attributes.position;
+  const colors = new Float32Array(positions.count * 3);
+
+  const innerColor = new THREE.Color(0x2a5f3a); // uy atrofi — ochroq maysa
+  const outerColor = new THREE.Color(0x142e1d); // chekkalar — tungi to'q yashil
+  const color = new THREE.Color();
+
+  for (let i = 0; i < positions.count; i++) {
+    // Plane hali yotqizilmagan: lokal x/y — kelajakdagi gorizontal koordinatalar
+    const x = positions.getX(i);
+    const y = positions.getY(i);
+
+    const distance = Math.hypot(x, y); // markazdan (uydan) uzoqlik
+    // Ikki chastotali sinus to'ri — haqiqiy noise'ning soddalashgan o'rinbosari
+    const noise =
+      Math.sin(x * 0.35 + y * 0.2) * Math.sin(x * 0.15 - y * 0.4) * 0.5 +
+      Math.sin(x * 1.1) * Math.sin(y * 0.9) * 0.5;
+
+    const t = THREE.MathUtils.clamp(distance / 38 + noise * 0.07, 0, 1);
+    color.lerpColors(innerColor, outerColor, t);
+
+    colors[i * 3] = color.r;
+    colors[i * 3 + 1] = color.g;
+    colors[i * 3 + 2] = color.b;
+  }
+
+  geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+
+  ground.geometry.dispose(); // eski segmentsiz geometriyani xotiradan bo'shatamiz
+  ground.geometry = geometry;
+  ground.material.vertexColors = true;
+  // Material rangi vertex ranglariga KO'PAYtiriladi — oq qilamiz,
+  // aks holda eski to'q yashil hamma vertex rangini xiralashtirardi
+  ground.material.color.set(0xffffff);
+  ground.material.needsUpdate = true; // shader qayta kompilyatsiyasi uchun signal
+}
+
+enhanceGround();
+
+/* ============================================================
+   9. INTERAKTIVLIK — Raycaster: hover va tanlash
    Mexanika:
    - hover:  kursor qavat ustida → cursor 'pointer' + qavat 1.03x
              kattalashadi (silliq lerp bilan, animate() ichida)
@@ -670,7 +916,7 @@ window.addEventListener('keydown', (event) => {
 });
 
 /* ============================================================
-   9. RESIZE — oyna o'lchami o'zgarganda
+   10. RESIZE — oyna o'lchami o'zgarganda
    ============================================================ */
 window.addEventListener('resize', () => {
   // Kameraning ekran nisbatini yangilaymiz, aks holda rasm cho'ziladi
@@ -683,7 +929,7 @@ window.addEventListener('resize', () => {
 });
 
 /* ============================================================
-   10. ANIMATSIYA SIKLI (animate loop)
+   11. ANIMATSIYA SIKLI (animate loop)
    Har kadrda (~60 fps) sahnani qayta chizadi.
    ============================================================ */
 function animate() {

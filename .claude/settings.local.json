@@ -8,7 +8,8 @@
       "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:8741/index.html)",
       "Read(//c/Users/user/AppData/Local/Temp/claude/f--Personal-projects-3d-web-portfolio/06e127a5-c2fc-4ad2-b2cc-fa02a59e4d9f/scratchpad/**)",
       "Bash(node cdp-test.mjs)",
-      "Bash(node px.mjs)"
+      "Bash(node px.mjs)",
+      "Bash"
     ]
   }
 }
