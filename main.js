@@ -955,6 +955,159 @@ function enhanceGround() {
 enhanceGround();
 
 /* ============================================================
+   8.5 NOM LAVHASI — "AZAMAT YAKUBBAEV"
+   Tosh yo'lkaning oxirida, zanjirga osilgan yog'och taxtacha —
+   uy kimga tegishli ekanini mehmonga birinchi bo'lib aytadigan jism.
+   Matn 3D shrift emas, CanvasTexture: 2D canvas'ga yozuv chiziladi
+   va taxta yuziga tekstura sifatida yopishtiriladi — arzon, aniq
+   o'qiladi va cartoon uslubga mos. Taxta shamolda ohista tebranadi
+   (updateAmbientAnimations ichida).
+   ============================================================ */
+
+function createNameSignTexture() {
+  const canvas = document.createElement('canvas');
+  canvas.width = 512;
+  canvas.height = 256;
+  const ctx = canvas.getContext('2d');
+
+  const texture = new THREE.CanvasTexture(canvas);
+  /*
+    CanvasTexture sukut bo'yicha rang fazosini bildirmaydi; SRGB deb
+    belgilanmasa renderer uni chiziqli deb qabul qilib, lavha kutilgandan
+    och/xira ko'rinadi.
+  */
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.anisotropy = 4; // qiya burchakdan qaralganda matn "sochilib" ketmasin
+
+  function draw() {
+    // Yog'och fon
+    ctx.fillStyle = '#6e4522';
+    ctx.fillRect(0, 0, 512, 256);
+
+    // Ko'ndalang taxta choklari — bitta box "terilgan taxta" bo'lib o'qiladi
+    ctx.strokeStyle = 'rgba(0, 0, 0, 0.18)';
+    ctx.lineWidth = 3;
+    for (const y of [85, 170]) {
+      ctx.beginPath();
+      ctx.moveTo(8, y);
+      ctx.lineTo(504, y);
+      ctx.stroke();
+    }
+
+    // To'q hoshiya — cartoon "qalin kontur"
+    ctx.strokeStyle = '#3f2312';
+    ctx.lineWidth = 10;
+    ctx.strokeRect(7, 7, 498, 242);
+
+    // Ism — deraza nuriga mos iliq krem rangda
+    ctx.fillStyle = '#ffe2b0';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.font = '700 76px Quicksand, sans-serif';
+    ctx.fillText('AZAMAT', 256, 92);
+    ctx.font = '700 60px Quicksand, sans-serif';
+    ctx.fillText('YAKUBBAEV', 256, 178);
+
+    texture.needsUpdate = true; // canvas o'zgardi — GPU'ga qayta yuborilsin
+  }
+
+  draw();
+  /*
+    Birinchi chizishda Quicksand hali yuklanmagan bo'lishi mumkin (u CSS
+    orqali keladi) — brauzer zaxira shrift bilan chizadi. Shrift kelgach
+    bir marta qayta chizamiz, lavha sayt tipografiyasiga mos bo'ladi.
+  */
+  if (document.fonts?.load) {
+    document.fonts.load('700 76px Quicksand').then(draw).catch(() => {});
+  }
+
+  return texture;
+}
+
+function createNameSign() {
+  const gradientMap = createToonGradientMap();
+  const toon = (color) => new THREE.MeshToonMaterial({ color, gradientMap });
+
+  const woodPost = toon(0x6b4226); // daraxt tanalari bilan bir xil jigarrang
+  const woodDark = toon(0x3f2312); // zanjir/qirralar — konturga mos to'q tus
+
+  const sign = new THREE.Group();
+  sign.name = 'nameSign';
+
+  // Tik ustun
+  const post = new THREE.Mesh(new THREE.BoxGeometry(0.14, 2.3, 0.14), woodPost);
+  post.position.y = 1.15;
+
+  // Ustun uchidagi qalpoqcha — mayda, lekin siluetni "tugallaydi"
+  const cap = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.06, 0.22), woodDark);
+  cap.position.y = 2.33;
+
+  // Gorizontal yelka — taxta shundan osiladi
+  const arm = new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.12, 0.12), woodPost);
+  arm.position.set(0.68, 2.24, 0);
+
+  // Qiya tirgak — yelkani "ushlab turadi" (haqiqiy statik emas, vizual ishonch)
+  const brace = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.55, 0.08), woodDark);
+  brace.position.set(0.32, 1.98, 0);
+  brace.rotation.z = Math.PI / 4;
+
+  /*
+    Tebranadigan qism alohida guruh: pivot (aylanish markazi) yelkaga
+    osilgan nuqtada. Shunda rotation taxtani xuddi zanjirda turgandek
+    osilish nuqtasi atrofida chayqatadi.
+  */
+  const swing = new THREE.Group();
+  swing.position.set(0.68, 2.18, 0);
+
+  const chainGeometry = new THREE.CylinderGeometry(0.018, 0.018, 0.3, 6);
+  const chainL = new THREE.Mesh(chainGeometry, woodDark);
+  chainL.position.set(-0.55, -0.15, 0);
+  const chainR = chainL.clone();
+  chainR.position.x = 0.55;
+
+  const texture = createNameSignTexture();
+  /*
+    Old yuz: matn teksturasi + o'sha teksturadan yumshoq emissive —
+    kechqurun ham derazalar kabi ichdan iliq yoritilgandek o'qiladi.
+  */
+  const faceMaterial = new THREE.MeshToonMaterial({
+    map: texture,
+    gradientMap,
+    emissive: 0xffc98a,
+    emissiveMap: texture,
+    emissiveIntensity: 0.32
+  });
+
+  /*
+    BoxGeometry materiallar tartibi: +x, -x, +y, -y, +z (old), -z (orqa).
+    Matn faqat old yuzda; orqa yuzga tekstura qo'yilsa matn oynadagidek
+    teskari (mirror) chiqardi — orqasi oddiy yog'och qoladi.
+  */
+  const board = new THREE.Mesh(
+    new THREE.BoxGeometry(1.6, 0.75, 0.07),
+    [woodDark, woodDark, woodDark, woodDark, faceMaterial, woodDark]
+  );
+  board.position.y = -0.68;
+
+  swing.add(chainL, chainR, board);
+  sign.add(post, cap, arm, brace, swing);
+
+  /*
+    Joylashuv: tosh yo'lkaning o'rtalarida, o'ng chetida — pochta qutisi
+    (z=3.4) va yo'lka oxiri (z≈9.5) orasida. Boshlang'ich kameradan
+    (8, 6, 10) qaraganda lavha kadr ichida to'liq ko'rinadi va old yuzi
+    o'qiladigan burchakda turadi.
+  */
+  sign.position.set(3.1, 0, 6.6);
+  sign.rotation.y = 0.9;
+
+  return { group: sign, swing };
+}
+
+const nameSign = createNameSign();
+scene.add(nameSign.group);
+
+/* ============================================================
    9. JONLILIK — qushlar, shamol, tutun, bulutlar
    Sahnani "muzlagan rasm"dan "yashayotgan olam"ga aylantiruvchi
    mayda harakatlar. Hammasi ATAYLAB arzon: ~12 mesh + 2 ta Points
@@ -1361,6 +1514,14 @@ function updateAmbientAnimations(time) {
     const traveled = c.baseX + time * c.speed + CLOUD_WRAP_X;
     c.group.position.x = ((traveled % range) + range) % range - CLOUD_WRAP_X;
   });
+
+  /*
+    Nom lavhasi zanjirda ohista chayqaladi — daraxt shoxlarini tebratayotgan
+    o'sha yengil shabada unga ham "tegib turadi". Ikki o'q, ikki xil chastota:
+    harakat davriy sikl bo'lib sezilmaydi, tabiiy tartibsizlik hosil bo'ladi.
+  */
+  nameSign.swing.rotation.x = Math.sin(time * 1.1) * 0.05;
+  nameSign.swing.rotation.z = Math.sin(time * 0.75 + 1.7) * 0.035;
 }
 
 /* ============================================================
