@@ -291,6 +291,151 @@ body {
 }
 
 /* ============================================================
+   MAXFIY CARDLAR — uchar chiroq topilmalari
+   Bazaviy ko'rinish .info-card'dan meros (ikkala klass birga turadi),
+   bu yerda faqat farqi: OLTIN chegara va kuchliroq nur — foydalanuvchi
+   "bu oddiy bo'lim emas, yashirin sovg'a" ekanini darhol sezadi.
+   ============================================================ */
+.secret-card {
+  border: 1px solid rgba(255, 215, 106, 0.75);
+  box-shadow:
+    0 10px 40px rgba(0, 0, 0, 0.45),
+    0 0 34px rgba(255, 215, 106, 0.28); /* oltin aura */
+}
+
+.secret-card h2 {
+  color: #ffd76a; /* sarlavha ham oltin tusda */
+}
+
+/* "Maxfiy topilma" yorlig'i — sarlavha ustidagi mayda nishon */
+.secret-tag {
+  display: inline-block;
+  margin-bottom: 10px;
+  padding: 3px 12px;
+  border: 1px solid rgba(255, 215, 106, 0.5);
+  border-radius: 999px;
+  background: rgba(255, 215, 106, 0.12);
+  color: #ffd76a;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+/* ============================================================
+   UCHAR CHIROQ UI — tooltip, boshqaruv belgisi, joystick
+   ============================================================ */
+
+/*
+  Hotspot pufakchasi. left/top ni controllableOrb.js har kadrda
+  3D proyeksiyadan yozadi; translate(-50%, -100%) esa pufakchani
+  nuqtaning ustiga markazlab qo'yadi. transition faqat opacity'da —
+  pozitsiyaga qo'yilsa pufakcha nuqtadan "sudralib" orqada qolardi.
+*/
+#orb-tooltip {
+  position: fixed;
+  left: 0;
+  top: 0;
+  transform: translate(-50%, -100%);
+  z-index: 9; /* cardlardan (10) pastda — card ochiq bo'lsa u ustun */
+
+  padding: 8px 14px;
+  background: rgba(26, 24, 48, 0.85);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid rgba(255, 215, 106, 0.6);
+  border-radius: 999px;
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.4);
+
+  font-family: 'Quicksand', 'Segoe UI', sans-serif;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: #ffd76a;
+  white-space: nowrap;
+
+  opacity: 0;
+  pointer-events: none; /* pufakcha sichqonchaga to'siq emas */
+  transition: opacity 0.25s ease;
+}
+
+#orb-tooltip.visible {
+  opacity: 1;
+}
+
+/* Boshqaruv eslatmasi — yuqori chap burchak: cardlar (chapda, markazda),
+   joystick (pastki chap) va versiya belgisi (pastki o'ng) bilan to'qnashmaydi */
+.control-hint {
+  position: fixed;
+  top: 14px;
+  left: 14px;
+  z-index: 9;
+
+  padding: 8px 14px;
+  background: rgba(26, 24, 48, 0.6);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid rgba(255, 183, 94, 0.3);
+  border-radius: 999px;
+
+  font-family: 'Quicksand', 'Segoe UI', sans-serif;
+  font-size: 0.8rem;
+  color: rgba(243, 236, 223, 0.85);
+
+  pointer-events: none;
+  user-select: none;
+}
+
+.control-hint b {
+  color: #ffcf8a;
+}
+
+/* Sukut bo'yicha desktop matni; touch qurilmada joystick matni */
+.hint-mobile { display: none; }
+
+/*
+  Virtual joystick — faqat asosiy kirish qurilmasi "dag'al" (barmoq)
+  bo'lganda ko'rinadi: telefon/planshetlar. Sichqonchali kompyuterda
+  bu doira keraksiz joy egallab turardi.
+*/
+#joystick {
+  display: none;
+  position: fixed;
+  left: 22px;
+  bottom: 26px;
+  z-index: 9;
+
+  width: 110px;
+  height: 110px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 183, 94, 0.4);
+  background: rgba(26, 24, 48, 0.4);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+
+  touch-action: none; /* barmoq harakati scroll/zoom emas, faqat joystick */
+}
+
+#joystick-knob {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 48px;
+  height: 48px;
+  margin: -24px 0 0 -24px; /* o'z markazida turishi uchun */
+  border-radius: 50%;
+  background: rgba(255, 183, 94, 0.55);
+  border: 2px solid rgba(255, 215, 106, 0.8);
+  box-shadow: 0 0 14px rgba(255, 183, 94, 0.4);
+  transition: transform 0.15s ease; /* qo'yib yuborilganda markazga "qaytish" */
+}
+
+@media (pointer: coarse) {
+  #joystick { display: block; }
+  .hint-desktop { display: none; }
+  .hint-mobile { display: inline; }
+}
+
+/* ============================================================
    VERSIYA BELGISI — pastki o'ng burchakdagi kichik yorliq
    ============================================================ */
 

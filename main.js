@@ -8,6 +8,8 @@
 
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+// Uchar chiroq — foydalanuvchi boshqaradigan orb va maxfiy hotspotlar
+import { createOrb, updateOrb, checkHotspots } from './controllableOrb.js';
 
 /* ============================================================
    1. SAHNA (Scene)
@@ -1108,6 +1110,15 @@ const nameSign = createNameSign();
 scene.add(nameSign.group);
 
 /* ============================================================
+   8.6 UCHAR CHIROQ
+   Butun mantiq controllableOrb.js modulida: jismning o'zi, klaviatura/
+   joystick boshqaruvi, hovli chegaralari, to'siqlar va maxfiy hotspot
+   nuqtalari. Bu yerda faqat yaratamiz; har kadr yangilanishi animate()
+   ichida (updateOrb + checkHotspots).
+   ============================================================ */
+createOrb(scene);
+
+/* ============================================================
    9. JONLILIK — qushlar, shamol, tutun, bulutlar
    Sahnani "muzlagan rasm"dan "yashayotgan olam"ga aylantiruvchi
    mayda harakatlar. Hammasi ATAYLAB arzon: ~12 mesh + 2 ta Points
@@ -1661,7 +1672,14 @@ let selectedGroup = null;
 
 /* ---------- HTML card'lar bilan bog'lanish ---------- */
 
-const infoCards = document.querySelectorAll('.info-card');
+/*
+  :not(.secret-card) — maxfiy cardlar (uchar chiroq topilmalari) HAM
+  .info-card klassini oladi (uslub merosxo'rligi uchun), lekin ularning
+  ochish/yopish hayoti butunlay controllableOrb.js qo'lida. Bu yerda
+  chetlab o'tilmasa, qavat tanlanganda onSectionSelect ochiq maxfiy
+  cardni ham yopib yuborardi.
+*/
+const infoCards = document.querySelectorAll('.info-card:not(.secret-card)');
 
 /*
   Bo'lim tanlanganda: mos card'ga .visible klassi qo'shiladi —
@@ -1804,7 +1822,9 @@ window.addEventListener('click', (event) => {
   u esa onSectionDeselect() orqali card'ni yopadi. Yagona "haqiqat
   manbai" — 3D tanlov holati; UI doim unga ergashadi.
 */
-document.querySelectorAll('.card-close').forEach((btn) => {
+// Maxfiy cardlarning "×" tugmasi bundan mustasno — ular 3D tanlov bilan
+// bog'liq emas, o'z yopish mantig'i controllableOrb.js da
+document.querySelectorAll('.info-card:not(.secret-card) .card-close').forEach((btn) => {
   btn.addEventListener('click', () => deselectAll());
 });
 
@@ -1830,8 +1850,23 @@ window.addEventListener('resize', () => {
    12. ANIMATSIYA SIKLI (animate loop)
    Har kadrda (~60 fps) sahnani qayta chizadi.
    ============================================================ */
+/*
+  Kadrlar orasidagi real vaqt (delta) — chiroq harakati uchun zarur:
+  tezlanish/ishqalanish dt ga ko'paytiriladi, shunda 144Hz ekranda ham,
+  sekinlashgan kadrlarda ham harakat BIR XIL tezlikda his qilinadi.
+  (THREE.Clock bu versiyada deprecated — performance.now farqi kifoya.)
+*/
+let lastFrameTime = performance.now();
+
 function animate() {
   requestAnimationFrame(animate);
+
+  // Uzoq pauzalardan keyin (tab yashirilgan) delta juda katta bo'lib
+  // qoladi — chiroq bir kadrda devor ortiga "teleport" bo'lmasligi
+  // uchun 50ms bilan cheklaymiz
+  const now = performance.now();
+  const dt = Math.min((now - lastFrameTime) / 1000, 0.05);
+  lastFrameTime = now;
 
   // Damping (inersiya) yoqilgan bo'lsa, har kadrda update() chaqirish SHART,
   // aks holda silliq harakat ishlamaydi
@@ -1852,6 +1887,10 @@ function animate() {
 
   // Jonlilik: qushlar, daraxt tebranishi, tutun, bulutlar (9-bo'lim)
   updateAmbientAnimations(time);
+
+  // Uchar chiroq: harakat + hotspot tekshiruvi (controllableOrb.js)
+  updateOrb(dt, time);
+  checkHotspots(camera, dt);
 
   /*
     Hover masshtabi: har guruh o'z targetScale (1 yoki 1.03) tomon

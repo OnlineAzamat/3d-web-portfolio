@@ -126,6 +126,82 @@
       </div>
     </article>
 
+    <!-- ============================================================
+         MAXFIY CARDLAR — uchar chiroq hotspotlari ochadigan topilmalar.
+         Asosiy .info-card uslubini oladi, lekin .secret-card klassi
+         oltin chegara beradi ("maxfiy topilma" hissi). main.js dagi
+         asosiy card mantig'i bularni ATAYLAB chetlab o'tadi
+         (:not(.secret-card)) — ularni faqat controllableOrb.js boshqaradi.
+         ============================================================ -->
+
+    <!-- Hotspot: katta daraxt tagida -->
+    <article class="info-card secret-card" data-hotspot="hobbies">
+      <button class="card-close" aria-label="Yopish">&times;</button>
+      <div class="card-body">
+        <span class="secret-tag">✦ Maxfiy topilma</span>
+        <h2>🎯 Qiziqishlarim</h2>
+        <p>
+          Bu yerga hobbi va qiziqishlaringiz yoziladi: masalan, shaxmat,
+          fotografiya, sayohat, kitoblar... (placeholder matn)
+        </p>
+      </div>
+    </article>
+
+    <!-- Hotspot: uyning orqa hovlisida -->
+    <article class="info-card secret-card" data-hotspot="certificates">
+      <button class="card-close" aria-label="Yopish">&times;</button>
+      <div class="card-body">
+        <span class="secret-tag">✦ Maxfiy topilma</span>
+        <h2>📜 Sertifikatlar</h2>
+        <p>
+          Bu yerga sertifikatlar ro'yxati yoziladi: kurs nomi, platforma,
+          yil... (placeholder matn)
+        </p>
+      </div>
+    </article>
+
+    <!-- Hotspot: pochta qutisi yonida -->
+    <article class="info-card secret-card" data-hotspot="fact">
+      <button class="card-close" aria-label="Yopish">&times;</button>
+      <div class="card-body">
+        <span class="secret-tag">✦ Maxfiy topilma</span>
+        <h2>✨ Qiziqarli fakt</h2>
+        <p>
+          Bu yerga o'zingiz haqingizda kutilmagan, esda qoladigan bitta
+          fakt yoziladi. (placeholder matn)
+        </p>
+      </div>
+    </article>
+
+    <!-- Hotspot: nom lavhasi yonida -->
+    <article class="info-card secret-card" data-hotspot="cv">
+      <button class="card-close" aria-label="Yopish">&times;</button>
+      <div class="card-body">
+        <span class="secret-tag">✦ Maxfiy topilma</span>
+        <h2>📄 CV yuklab olish</h2>
+        <p>To'liq rezyumeni bir bosishda yuklab oling:</p>
+        <!-- href keyin haqiqiy CV fayliga almashtiriladi -->
+        <a class="btn" href="#" download>⬇️ CV yuklab olish (PDF)</a>
+      </div>
+    </article>
+
+  </div>
+
+  <!--
+    Hotspot taklif pufakchasi — 3D nuqta ekran koordinatasiga
+    proyeksiyalanadi (controllableOrb.js), shu div o'sha joyga suriladi.
+  -->
+  <div id="orb-tooltip">✦ Kashfiyot! Shu yerda bir soniya to'xtang…</div>
+
+  <!-- Boshqaruv eslatmasi — doim ko'rinib turadigan kichik belgi -->
+  <div class="control-hint">
+    <span class="hint-desktop">💡 Uchar chiroqni <b>WASD / strelkalar</b> bilan boshqaring</span>
+    <span class="hint-mobile">💡 Uchar chiroqni joystik bilan boshqaring</span>
+  </div>
+
+  <!-- Virtual joystick — faqat touch qurilmalarda ko'rinadi (CSS) -->
+  <div id="joystick">
+    <div id="joystick-knob"></div>
   </div>
 
   <!--
@@ -134,9 +210,10 @@
     yangi vizual qatlam) MINOR'ni oshiradi, mayda tuzatishlar PATCH'ni.
     Hozirgacha: 0.1 fundament → 0.2 uy → 0.3 interaktivlik →
     0.4 cardlar → 0.5 atrof-muhit → 0.6 deraza ichki manzaralari →
-    0.7 jonlilik (qushlar, shamol, tutun, bulutlar, yulduzlar).
+    0.7 jonlilik (qushlar, shamol, tutun, bulutlar, yulduzlar) →
+    0.8 uchar chiroq (boshqariladigan orb + maxfiy hotspotlar).
   -->
-  <div class="version-badge">v0.7.2</div>
+  <div class="version-badge">v0.8.0</div>
 
   <!-- type="module" shart: import/export sintaksisi faqat modullarda ishlaydi -->
   <script type="module" src="main.js"></script>
