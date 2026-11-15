@@ -1,15 +1,52 @@
 /*
-  3D Portfolio — 1-bosqich: fundament (bo'sh sahna)
+  3D Portfolio — main.js
   --------------------------------------------------
-  Bu faylda faqat "skelet" bor: sahna, kamera, renderer, kontrollar,
-  tuman (fog), yer tekisligi va animatsiya sikli.
-  Uy, yorug'lik va boshqa detallar keyingi bosqichlarda qo'shiladi.
+  Sahnaning "dirijyori": sahna, kamera, renderer, uy, hovli, jonlilik,
+  interaktivlik va animatsiya sikli shu yerda. Katta mustaqil qismlar
+  o'z modullarida:
+    data.js            — barcha matn/kontent (yagona manba)
+    ui.js              — cardlar, dock, tur paneli (HTML qatlam)
+    town.js            — loyihalar shaharchasi (8 bino, yo'l, chiroqlar)
+    atmosphere.js      — osmon gumbazi, kun/tun almashinuvi
+    controllableOrb.js — uchar chiroq
 */
 
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+// Post-processing: sahna avval tasvirga chiziladi, keyin ustidan effekt (bloom)
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 // Uchar chiroq — foydalanuvchi boshqaradigan orb va maxfiy hotspotlar
 import { createOrb, updateOrb, checkHotspots } from './controllableOrb.js';
+import { createTown } from './town.js';
+import { createAtmosphere } from './atmosphere.js';
+import { HOUSE_SECTIONS, STATIONS } from './data.js';
+import {
+  renderUI, bindDock, revealImages, setActiveNav, setDayNightLabel,
+  showTour, hideTour, hideLoader
+} from './ui.js';
+
+/*
+  0. TAYYORGARLIK
+  Cardlar va dock 3D koddan OLDIN DOM'ga qo'yiladi — pastdagi kod ularni
+  querySelector bilan qidiradi.
+*/
+renderUI();
+
+/*
+  3D yozuvlar (nom lavhasi, bino yorliqlari) canvas'ga chiziladi. Agar
+  shu paytda Quicksand hali yuklanmagan bo'lsa, canvas zaxira shriftni
+  "muzlatib" qo'yadi. Shuning uchun shriftni kutamiz — lekin ko'pi bilan
+  1.5 soniya (sekin internetda sahna shrift tufayli to'xtab qolmasin).
+*/
+try {
+  await Promise.race([
+    document.fonts.load('700 54px Quicksand'),
+    new Promise((resolve) => setTimeout(resolve, 1500))
+  ]);
+} catch { /* shrift yuklanmasa ham sahna ishlayveradi */ }
 
 /* ============================================================
    1. SAHNA (Scene)
@@ -23,9 +60,12 @@ const scene = new THREE.Scene();
   obyektlar "erigan" holda CSS'dagi osmon gradientiga tabiiy qo'shilib ketadi.
   near=15: kameraga yaqin joylar toza ko'rinadi,
   far=60: shu masofadan keyin hamma narsa tumanga to'liq singib ketadi.
-  scene.background ataylab qo'yilmagan — fon CSS gradient zimmasida.
+  Osmonning o'zi — sahnadagi gumbaz (atmosphere.js); fog rangi doim
+  uning ufq rangiga teng bo'ladi.
 */
-scene.fog = new THREE.Fog(0x2f2a55, 15, 60);
+// v1.0: shaharcha kattalashgani uchun tuman uzoqroqdan boshlanadi (26..95).
+// Rangni endi atmosphere.js boshqaradi (kun/tun), bu yerdagisi boshlang'ich qiymat.
+scene.fog = new THREE.Fog(0x362d5b, 26, 95);
 
 /* ============================================================
    2. KAMERA (PerspectiveCamera)
@@ -34,14 +74,21 @@ const camera = new THREE.PerspectiveCamera(
   50,                                    // FOV — 50° tabiiy, "keng burchak" buzilishlarisiz
   window.innerWidth / window.innerHeight, // ekran nisbati
   0.1,                                   // eng yaqin ko'rinadigan masofa
-  100                                    // eng uzoq masofa — fog.far(60) dan katta bo'lishi kifoya
+  500                                    // eng uzoq masofa — osmon gumbazi (radius 190) sig'ishi kerak
 );
 
 /*
   Boshlang'ich pozitsiya: uy (kelajakda sahna markazida turadi) biroz
   yon tomondan va tepadan ko'rinadigan qulay burchak.
 */
-camera.position.set(8, 6, 10);
+const isNarrow = () => window.innerWidth <= 768; // mobil (card pastdan chiqadi)
+const HOME_VIEW = {
+  position: new THREE.Vector3(9.5, 7, 12.5),
+  target: new THREE.Vector3(0, 1.2, 0)
+};
+// Sahifa ochilganda kamera uzoqdan, butun shaharcha ustidan boshlaydi va
+// HOME_VIEW ga uchib keladi (kirish parvozi — animate() ichida ishga tushadi)
+camera.position.set(27, 21, 36);
 
 /* ============================================================
    3. RENDERER (WebGLRenderer)
@@ -82,7 +129,7 @@ controls.dampingFactor = 0.05;
 
 /* Zoom cheklangan: juda yaqin ham, juda uzoq ham ketib bo'lmaydi */
 controls.minDistance = 5;
-controls.maxDistance = 25;
+controls.maxDistance = 42; // butun shaharchani ko'rish uchun yetarli
 
 /*
   Vertikal burchak chegarasi: kamera yer ostiga tushib ketmasligi uchun.
@@ -93,7 +140,7 @@ controls.maxPolarAngle = Math.PI / 2 - 0.05;
 /* ============================================================
    5. YER (PlaneGeometry)
    ============================================================ */
-const groundGeometry = new THREE.PlaneGeometry(80, 80);
+const groundGeometry = new THREE.PlaneGeometry(260, 260);
 
 /*
   Hozircha MeshBasicMaterial — u yorug'liksiz ham ko'rinadi.
@@ -548,7 +595,8 @@ function createHouse() {
   const floor2 = new THREE.Group();
   floor2.name = 'floor2';
   floor2.position.y = FLOOR2_BASE;
-  floor2.userData = { id: 'projects', title: 'Projects', originalY: FLOOR2_BASE };
+  // v1.0: loyihalar shaharchaga ko'chdi — 2-qavat (ish xonasi) endi "Experience"
+  floor2.userData = { id: 'experience', title: 'Experience', originalY: FLOOR2_BASE };
 
   const walls2 = new THREE.Mesh(
     new THREE.BoxGeometry(FLOOR2_W, FLOOR2_H, FLOOR2_D),
@@ -810,6 +858,27 @@ function createEnvironment() {
     createTree(-4.5, 8.0, 0.85)
   );
 
+  /*
+    v1.0 — shaharcha daraxtlari:
+    - 8 tasi binolar ORASIDA (ko'cha chiroqlari orqasida), halqa bo'ylab;
+    - 18 tasi shaharcha ortida tartibsiz sochilgan "o'rmon cheti".
+    Hammasi createTree orqali — demak shamol tebranishiga ham o'zi ulanadi.
+  */
+  for (let i = 0; i < 8; i++) {
+    const angle = (i / 8) * Math.PI * 2 + (rand() - 0.5) * 0.08;
+    const radius = 18.6 + rand() * 1.6;
+    environment.add(
+      createTree(Math.cos(angle) * radius, Math.sin(angle) * radius, 0.95 + rand() * 0.45)
+    );
+  }
+  for (let i = 0; i < 18; i++) {
+    const angle = rand() * Math.PI * 2;
+    const radius = 24.5 + rand() * 9;
+    environment.add(
+      createTree(Math.cos(angle) * radius, Math.sin(angle) * radius, 1.0 + rand() * 0.8)
+    );
+  }
+
   /* ---------- Tosh yo'lka ----------
      Eshikdan (z≈2.7) boshlab kameraning boshlang'ich tomoni sari
      cho'ziladi va oxiriga borib sekin +x ga (kamera turgan tarafga)
@@ -878,16 +947,16 @@ function createEnvironment() {
      yorug'lik hisobi keraksiz — bular faqat siluet, fog ularni osmon
      rangiga o'zi qorishtiradi va sahnaga chuqurlik beradi. */
   const hillMaterial = new THREE.MeshBasicMaterial({ color: 0x3a3468 });
-  const HILL_COUNT = 8;
+  const HILL_COUNT = 11;
   for (let i = 0; i < HILL_COUNT; i++) {
     // to'liq aylana bo'ylab, biroz notekis qadam bilan
     const angle = (i / HILL_COUNT) * Math.PI * 2 + (rand() - 0.5) * 0.5;
-    const distance = 33 + rand() * 6; // yer tekisligi (40) ichida qoladi
-    const height = 3.5 + rand() * 3.5;
+    const distance = 50 + rand() * 9; // shaharcha va o'rmon chetidan narida
+    const height = 5.5 + rand() * 5;
 
     const hill = new THREE.Mesh(
       // 5 qirrali konus — "low-poly tog'" silueti uchun yetarli
-      new THREE.ConeGeometry(7 + rand() * 6, height, 5),
+      new THREE.ConeGeometry(11 + rand() * 9, height, 5),
       hillMaterial
     );
     hill.position.set(
@@ -898,6 +967,9 @@ function createEnvironment() {
     hill.rotation.y = rand() * Math.PI;
     environment.add(hill);
   }
+
+  // Kun/tun almashinuvi tepalik rangini o'zgartiradi — materialga havola kerak
+  environment.userData.hillMaterial = hillMaterial;
 
   return environment;
 }
@@ -915,7 +987,7 @@ scene.add(environment);
 function enhanceGround() {
   // Vertex colors ko'rinishi uchun tekislik segmentlarga bo'linadi:
   // har segment burchagida o'z rangi bo'ladi, oralari silliq aralashadi
-  const geometry = new THREE.PlaneGeometry(80, 80, 64, 64);
+  const geometry = new THREE.PlaneGeometry(260, 260, 160, 160);
 
   const positions = geometry.attributes.position;
   const colors = new Float32Array(positions.count * 3);
@@ -935,7 +1007,7 @@ function enhanceGround() {
       Math.sin(x * 0.35 + y * 0.2) * Math.sin(x * 0.15 - y * 0.4) * 0.5 +
       Math.sin(x * 1.1) * Math.sin(y * 0.9) * 0.5;
 
-    const t = THREE.MathUtils.clamp(distance / 38 + noise * 0.07, 0, 1);
+    const t = THREE.MathUtils.clamp(distance / 48 + noise * 0.07, 0, 1);
     color.lerpColors(innerColor, outerColor, t);
 
     colors[i * 3] = color.r;
@@ -1116,7 +1188,29 @@ scene.add(nameSign.group);
    nuqtalari. Bu yerda faqat yaratamiz; har kadr yangilanishi animate()
    ichida (updateOrb + checkHotspots).
    ============================================================ */
-createOrb(scene);
+/*
+  LOYIHALAR SHAHARCHASI (town.js) — chiroqdan OLDIN quriladi: binolar
+  chiroq uchun ham to'siq, ham "bekat" (yoniga borib to'xtalsa ochiladi).
+*/
+const town = createTown({ gradientMap: createToonGradientMap() });
+scene.add(town.group);
+
+createOrb(scene, {
+  obstacles: town.obstacles,
+  hotspots: town.stations.map((station) => ({
+    id: `station-${station.id}`,
+    // Bekat nuqtasi bino fasadi oldida, yo'lakcha ustida
+    x: station.position.x + station.toCenter.x * 3.5,
+    z: station.position.z + station.toCenter.z * 3.5,
+    radius: 1.9,
+    label: `✦ ${station.def.label} — hold still to visit`,
+    onOpen: () => selectStation(station, { viaOrb: true }),
+    // Chiroq uzoqlashsa, O'ZI ochgan cardni o'zi yopadi
+    onClose: () => {
+      if (selectedStation === station && station.viaOrb) deselectAll();
+    }
+  }))
+});
 
 /* ============================================================
    9. JONLILIK — qushlar, shamol, tutun, bulutlar
@@ -1541,7 +1635,7 @@ function updateAmbientAnimations(time) {
    - hover:  kursor qavat ustida → cursor 'pointer' + qavat 1.03x
              kattalashadi (silliq lerp bilan, animate() ichida)
    - click:  qavat yon-yuqoriga chiqadi, qolganlari xiralashadi,
-             onSectionSelect(id) chaqiriladi
+             mos card ochiladi (showCard)
    - qayta click (o'sha qavat yoki bo'sh joy) → hammasi asl holatga
    ============================================================ */
 
@@ -1668,35 +1762,140 @@ function animateGroupOpacity(group, factor) {
 
 /* ---------- Tanlash holati ---------- */
 
-let selectedGroup = null;
+let selectedGroup = null;   // uyning tanlangan qismi (qavat/tom/pochta qutisi)
+let selectedStation = null; // shaharchaning tanlangan binosi
+
+const stationById = new Map(town.stations.map((station) => [station.id, station]));
+const houseGroupById = new Map(interactiveGroups.map((group) => [group.userData.id, group]));
+
+// Raycaster qidiradigan hamma narsa: uy qismlari + shaharcha binolari
+const pickables = [...interactiveGroups, ...town.stations.map((station) => station.group)];
 
 /* ---------- HTML card'lar bilan bog'lanish ---------- */
 
 /*
   :not(.secret-card) — maxfiy cardlar (uchar chiroq topilmalari) HAM
   .info-card klassini oladi (uslub merosxo'rligi uchun), lekin ularning
-  ochish/yopish hayoti butunlay controllableOrb.js qo'lida. Bu yerda
-  chetlab o'tilmasa, qavat tanlanganda onSectionSelect ochiq maxfiy
-  cardni ham yopib yuborardi.
+  ochish/yopish hayoti butunlay controllableOrb.js qo'lida.
 */
 const infoCards = document.querySelectorAll('.info-card:not(.secret-card)');
 
 /*
-  Bo'lim tanlanganda: mos card'ga .visible klassi qo'shiladi —
-  chiqish/kirish animatsiyasining o'zi CSS transition zimmasida
-  (desktopda chapdan, mobilda pastdan slayd). Qolganlari yopiladi.
+  id ga mos cardni ochadi, qolganlarini yopadi (id = null — hammasi yopiladi).
+  Chiqish/kirish animatsiyasi CSS transition zimmasida.
 */
-function onSectionSelect(id) {
+function showCard(id) {
   infoCards.forEach((card) => {
-    card.classList.toggle('visible', card.dataset.section === id);
+    const open = card.dataset.section === id;
+    if (open && !card.classList.contains('visible')) {
+      revealImages(card); // skrinshotlar faqat birinchi ochilishda yuklanadi
+      card.scrollTop = 0;
+    }
+    card.classList.toggle('visible', open);
+  });
+  setActiveNav(id);
+}
+
+/* ============================================================
+   10.1 KAMERA REJISSYORI — nuqtadan nuqtaga silliq parvoz
+   ============================================================ */
+
+const UP = new THREE.Vector3(0, 1, 0);
+const OVERVIEW = {
+  position: new THREE.Vector3(21, 23, 32),
+  target: new THREE.Vector3(0, 0.5, 0)
+};
+
+// Uy ko'rinishi. Mobilda card ekranning pastki 62% ini egallaydi —
+// nishon pastga suriladi, shunda uy ekranning ochiq (yuqori) qismida qoladi.
+function homeView() {
+  if (!isNarrow()) return HOME_VIEW;
+  return {
+    position: new THREE.Vector3(13, 10.5, 18),
+    target: new THREE.Vector3(1.4, selectedGroup ? -5 : 1, 0)
+  };
+}
+
+/*
+  Bino ko'rinishi: kamera shaharcha markazi tomonda turib, binoga
+  yarim yondan (¾ rakurs) qaraydi. Desktopda card chapda — nishon
+  binodan CHAPGA suriladi, natijada bino kadrning o'ng yarmida turadi.
+*/
+function stationView(station) {
+  const direction = station.toCenter.clone().applyAxisAngle(UP, -0.5);
+  const position = station.position.clone()
+    .addScaledVector(direction, isNarrow() ? 17 : 10.5);
+  position.y = isNarrow() ? 7 : 4.4;
+
+  const target = station.position.clone();
+  target.y = station.height * 0.45;
+
+  if (isNarrow()) {
+    target.y -= 4.6;
+  } else {
+    const right = target.clone().sub(position).normalize().cross(UP).normalize();
+    target.addScaledVector(right, -2.5);
+  }
+  return { position, target };
+}
+
+/*
+  flyTo — kamerani yangi ko'rinishga uchiradi.
+  To'g'ri chiziq bo'ylab emas: pozitsiya SILINDRIK koordinatalarda
+  (markaz atrofidagi burchak + radius + balandlik) interpolyatsiya
+  qilinadi. Shunda uyning narigi tomonidagi binoga uchganda kamera uyni
+  teshib o'tmaydi — uni aylanib o'tadi. O'rtada biroz ko'tariladi
+  (sin yoyi) — "qush parvozi" hissi.
+  Parvoz davomida OrbitControls o'chiq: foydalanuvchi sichqonchasi va
+  tween bir vaqtda kamerani tortishmasin.
+*/
+function flyTo(view, duration) {
+  const fromPosition = camera.position.clone();
+  const fromTarget = controls.target.clone();
+
+  const fromAngle = Math.atan2(fromPosition.z, fromPosition.x);
+  let deltaAngle = Math.atan2(view.position.z, view.position.x) - fromAngle;
+  deltaAngle = Math.atan2(Math.sin(deltaAngle), Math.cos(deltaAngle)); // eng qisqa yoy
+
+  const fromRadius = Math.hypot(fromPosition.x, fromPosition.z);
+  const toRadius = Math.hypot(view.position.x, view.position.z);
+
+  const travel = fromPosition.distanceTo(view.position);
+  if (travel < 0.05 && fromTarget.distanceTo(view.target) < 0.05) return;
+  const lift = Math.min(travel * 0.16, 5);
+  const time = duration || THREE.MathUtils.clamp(900 + travel * 45, 1100, 2400);
+
+  controls.enabled = false;
+  startTween('camera', time, (k) => {
+    const angle = fromAngle + deltaAngle * k;
+    const radius = THREE.MathUtils.lerp(fromRadius, toRadius, k);
+    camera.position.set(
+      Math.cos(angle) * radius,
+      THREE.MathUtils.lerp(fromPosition.y, view.position.y, k) + Math.sin(k * Math.PI) * lift,
+      Math.sin(angle) * radius
+    );
+    controls.target.lerpVectors(fromTarget, view.target, k);
+    camera.lookAt(controls.target);
+  }, () => {
+    controls.enabled = true;
   });
 }
 
-function onSectionDeselect() {
-  infoCards.forEach((card) => card.classList.remove('visible'));
+/* ============================================================
+   10.2 TANLASH — uy qismlari va shaharcha binolari
+   ============================================================ */
+
+// Uy qismlarini asl joyiga va asl ravshanligiga qaytaradi
+function restoreHouse() {
+  selectedGroup = null;
+  interactiveGroups.forEach((group) => {
+    animateGroupPosition(group, group.userData.basePosition);
+    animateGroupOpacity(group, 1);
+  });
 }
 
 function selectGroup(group) {
+  selectedStation = null;
   selectedGroup = group;
 
   // Tanlangan qavat: asl joyidan yon-yuqoriga chiqadi, to'liq ravshan
@@ -1712,22 +1911,185 @@ function selectGroup(group) {
     }
   });
 
-  onSectionSelect(group.userData.id);
+  /*
+    Kamera uy atrofida bo'lsa (foydalanuvchi o'zi tanlagan rakurs) —
+    tegmaymiz. Shaharchada yoki uzoqda bo'lsa — uyga uchib qaytamiz.
+  */
+  const awayFromHouse =
+    controls.target.distanceTo(HOME_VIEW.target) > 2.5 ||
+    camera.position.distanceTo(controls.target) > 22;
+  if (awayFromHouse || isNarrow()) flyTo(homeView());
+
+  showCard(group.userData.id);
+}
+
+function selectStation(station, { viaOrb = false } = {}) {
+  if (selectedGroup) restoreHouse();
+  selectedStation = station;
+  station.viaOrb = viaOrb; // chiroq ochgan bo'lsa, chiroq uzoqlashganda yopiladi
+
+  showCard(station.id);
+  flyTo(stationView(station));
 }
 
 function deselectAll() {
-  if (!selectedGroup) return;
-  selectedGroup = null;
-
-  interactiveGroups.forEach((group) => {
-    animateGroupPosition(group, group.userData.basePosition);
-    animateGroupOpacity(group, 1);
-  });
-
-  onSectionDeselect();
+  if (!selectedGroup && !selectedStation) return;
+  if (selectedGroup) restoreHouse();
+  selectedStation = null;
+  showCard(null);
 }
 
-/* ---------- Raycasting ---------- */
+// id bo'yicha ochish — dock, tur va klaviatura shu orqali ishlaydi
+function openSection(id) {
+  if (stationById.has(id)) selectStation(stationById.get(id));
+  else if (houseGroupById.has(id)) selectGroup(houseGroupById.get(id));
+}
+
+// Loyihalar orasida oldinga/orqaga (halqa bo'ylab)
+function stepStation(step) {
+  const count = town.stations.length;
+  const current = selectedStation ? town.stations.indexOf(selectedStation) : (step > 0 ? -1 : 0);
+  selectStation(town.stations[(current + step + count) % count]);
+}
+
+/* ============================================================
+   10.3 TUR REJIMI — kamera hamma bekatni o'zi aylanib chiqadi
+   ============================================================ */
+
+const TOUR_STOPS = [
+  ...HOUSE_SECTIONS.filter((section) => section.id !== 'contact').map((section) => ({
+    id: section.id, title: section.nav
+  })),
+  ...STATIONS.map((station) => ({ id: station.id, title: station.label })),
+  { id: 'contact', title: 'Contact' }
+];
+const TOUR_DWELL = 6500; // har bekatda turish vaqti, ms
+
+let tour = null; // { index, timer } yoki null
+
+function nextTourStop() {
+  tour.index += 1;
+  if (tour.index >= TOUR_STOPS.length) {
+    // Tur tugadi — butun shaharcha manzarasi bilan yakunlanadi
+    stopTour();
+    deselectAll();
+    flyTo(OVERVIEW);
+    return;
+  }
+  const stop = TOUR_STOPS[tour.index];
+  openSection(stop.id);
+  showTour(tour.index, TOUR_STOPS.length, stop.title, TOUR_DWELL);
+  tour.timer = setTimeout(nextTourStop, TOUR_DWELL);
+}
+
+function startTour() {
+  stopTour();
+  tour = { index: -1, timer: null };
+  nextTourStop();
+}
+
+function stopTour() {
+  if (!tour) return;
+  clearTimeout(tour.timer);
+  tour = null;
+  hideTour();
+}
+
+/* ============================================================
+   10.4 KUN / TUN va BLOOM
+   ============================================================ */
+
+const atmosphere = createAtmosphere({
+  scene,
+  hemiLight: tempHemiLight,
+  sunLight: tempDirLight
+});
+
+/*
+  Nur sochuvchi barcha materiallar: shaharchaniki (town.glowMaterials) +
+  uyniki (emissive rangi qora bo'lmaganlar). Kunduzi ularning nuri
+  pasaytiriladi — quyoshda chiroq yonib turmaydi.
+*/
+const glowMaterials = [...town.glowMaterials];
+house.traverse((obj) => {
+  if (obj.isMesh && obj.material.emissive && obj.material.emissive.getHex() !== 0) {
+    obj.material.userData.baseEmissive = obj.material.emissiveIntensity;
+    glowMaterials.push(obj.material);
+  }
+});
+
+/*
+  Bloom zanjiri: sahna → (yorqin joylar ajratiladi, xiralashtiriladi va
+  ustiga qo'shiladi) → ekranga chiqarish. HalfFloat target: 1.0 dan
+  yorqin qiymatlar (emissive) kesilmay saqlanadi — bloom aynan shularni
+  "ushlaydi". samples: 4 — composer ichida ham antialiasing qoladi.
+*/
+const composer = new EffectComposer(
+  renderer,
+  new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, samples: 4 })
+);
+composer.setPixelRatio(renderer.getPixelRatio());
+composer.setSize(window.innerWidth, window.innerHeight);
+
+const bloomPass = new UnrealBloomPass(
+  new THREE.Vector2(window.innerWidth, window.innerHeight),
+  0.42, // kuch — applyAtmosphere() kun/tunga qarab yangilaydi
+  0.55, // radius
+  0.6   // chegara (threshold)
+);
+composer.addPass(new RenderPass(scene, camera));
+composer.addPass(bloomPass);
+composer.addPass(new OutputPass());
+
+/*
+  Sifat rejimi. Bloom kuchsiz qurilmalarda qimmat, shuning uchun:
+  - ?fx=1 / ?fx=0 — majburan yoqish / o'chirish (sinov uchun);
+  - aks holda dastlabki kadrlar tezligi o'lchanadi va sekin bo'lsa
+    bloom o'chirilib, piksel zichligi pasaytiriladi (animate() ichida).
+*/
+const fxParam = new URLSearchParams(location.search).get('fx');
+let useBloom = fxParam !== '0';
+let qualityLocked = fxParam !== null;
+
+// k: 0 = tun, 1 = kun. Atmosfera hisoblagan holatni sahnaga tarqatadi.
+function applyAtmosphere(k) {
+  const state = atmosphere.apply(k);
+
+  ground.material.color.copy(state.ground);
+  environment.userData.hillMaterial.color.copy(state.hill);
+  cloudMaterial.color.copy(state.cloud);
+  cloudMaterial.opacity = state.cloudOpacity;
+  starMaterial.opacity = state.night;
+  SMOKE_FADE.copy(state.fog); // tutun osmon rangiga "eriydi"
+
+  glowMaterials.forEach((material) => {
+    material.emissiveIntensity = material.userData.baseEmissive * state.glow;
+  });
+  town.nightMaterials.forEach((material) => {
+    material.opacity = material.userData.baseOpacity * state.night;
+  });
+
+  bloomPass.strength = state.bloomStrength;
+  bloomPass.threshold = state.bloomThreshold;
+}
+
+applyAtmosphere(0);
+
+let isDay = false;
+
+function toggleDayNight() {
+  isDay = !isDay;
+  setDayNightLabel(isDay);
+  const from = atmosphere.state.k;
+  const to = isDay ? 1 : 0;
+  startTween('daynight', 2800, (k) => {
+    applyAtmosphere(THREE.MathUtils.lerp(from, to, k));
+  });
+}
+
+/* ============================================================
+   10.5 RAYCASTING va HODISALAR
+   ============================================================ */
 
 const raycaster = new THREE.Raycaster();
 const mouse = new THREE.Vector2();
@@ -1742,31 +2104,32 @@ function pickGroup(event) {
   mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
 
   raycaster.setFromCamera(mouse, camera);
-  const hits = raycaster.intersectObjects(interactiveGroups, true);
-  if (hits.length === 0) return null;
+  const hits = raycaster.intersectObjects(pickables, true);
+  // Ko'rinmas mesh'lar (masalan, o'yin taxtasining hali "o'ynalmagan"
+  // chiziqlari) hisobga olinmaydi
+  const hit = hits.find((h) => h.object.visible);
+  if (!hit) return null;
 
-  let obj = hits[0].object;
+  let obj = hit.object;
   while (obj && !obj.userData.id) obj = obj.parent;
   return obj;
 }
 
-/* ---------- Hodisalar ---------- */
-
 /*
-  Hodisa card USTIDA yuz berdimi? Card canvas ustidagi HTML qatlam —
-  usiz card ustida yurgan sichqoncha "orqasidagi" uyga ham tegib,
-  hover/tanlov chalkashardi (masalan, card ichidagi tugmani bosish
-  orqadagi bo'sh joyga bosish deb qabul qilinib, cardni yopib yuborardi).
+  Hodisa UI ustida yuz berdimi (card, dock, tur paneli)? Bular canvas
+  ustidagi HTML qatlam — usiz UI ustida yurgan sichqoncha "orqasidagi"
+  3D obyektga ham tegib, hover/tanlov chalkashardi.
 */
-function isEventOnCard(event) {
-  return event.target instanceof Element && event.target.closest('.info-card');
+function isEventOnUI(event) {
+  return event.target instanceof Element &&
+    event.target.closest('.info-card, #dock, #tour-bar');
 }
 
 window.addEventListener('mousemove', (event) => {
-  if (isEventOnCard(event)) {
-    // Card ustida 3D hover o'chadi; kursorni card o'zi boshqaradi
+  if (isEventOnUI(event)) {
+    // UI ustida 3D hover o'chadi; kursorni UI o'zi boshqaradi
     document.body.style.cursor = 'default';
-    interactiveGroups.forEach((g) => { g.userData.targetScale = 1; });
+    pickables.forEach((g) => { g.userData.targetScale = 1; });
     return;
   }
 
@@ -1777,8 +2140,8 @@ window.addEventListener('mousemove', (event) => {
 
   // Hover qilingan guruh kattalashish maqsadini oladi, qolganlari — 1.
   // Haqiqiy masshtablash animate() ichida silliq lerp bilan bo'ladi.
-  interactiveGroups.forEach((g) => {
-    g.userData.targetScale = g === group ? 1.03 : 1;
+  pickables.forEach((g) => {
+    g.userData.targetScale = g === group ? (g.userData.station ? 1.05 : 1.03) : 1;
   });
 });
 
@@ -1796,7 +2159,10 @@ window.addEventListener('pointerdown', (event) => {
 });
 
 window.addEventListener('click', (event) => {
-  if (isEventOnCard(event)) return; // card ichidagi bosishlar 3D ga tegmaydi
+  if (isEventOnUI(event)) return; // UI ichidagi bosishlar 3D ga tegmaydi
+
+  // Sahnaga har qanday bosish — "boshqaruvni o'zim olaman": tur to'xtaydi
+  stopTour();
 
   if (pointerDownAt) {
     const moved = Math.hypot(
@@ -1808,43 +2174,85 @@ window.addEventListener('click', (event) => {
 
   const group = pickGroup(event);
 
-  if (!group || group === selectedGroup) {
-    // Bo'sh joyga yoki tanlangan qavatning o'ziga bosildi — asl holat
+  if (!group || group === selectedGroup || (selectedStation && group === selectedStation.group)) {
+    // Bo'sh joyga yoki tanlangan obyektning o'ziga bosildi — asl holat
     deselectAll();
   } else {
-    selectGroup(group);
+    openSection(group.userData.id);
   }
 });
 
 /*
   Ikki tomonlama deselect: card'dagi "×" tugmasi ham xuddi bo'sh
-  joyga bosilgandek ishlaydi — deselectAll() qavatni joyiga qaytaradi,
-  u esa onSectionDeselect() orqali card'ni yopadi. Yagona "haqiqat
-  manbai" — 3D tanlov holati; UI doim unga ergashadi.
+  joyga bosilgandek ishlaydi. Yagona "haqiqat manbai" — 3D tanlov
+  holati; UI doim unga ergashadi.
 */
-// Maxfiy cardlarning "×" tugmasi bundan mustasno — ular 3D tanlov bilan
-// bog'liq emas, o'z yopish mantig'i controllableOrb.js da
+// Maxfiy cardlarning "×" tugmasi bundan mustasno — ularning o'z
+// yopish mantig'i controllableOrb.js da
 document.querySelectorAll('.info-card:not(.secret-card) .card-close').forEach((btn) => {
-  btn.addEventListener('click', () => deselectAll());
+  btn.addEventListener('click', () => {
+    stopTour();
+    deselectAll();
+  });
 });
 
-// Escape ham cardni yopadi — klaviatura foydalanuvchilari uchun qulaylik
+// Dock tugmalari (ui.js) → shu yerdagi funksiyalar
+bindDock({
+  go(target) {
+    if (target === 'tour') {
+      if (tour) stopTour(); else startTour();
+      return;
+    }
+    if (target === 'daynight') {
+      toggleDayNight();
+      return;
+    }
+
+    stopTour(); // qolgan har qanday tugma — qo'lda navigatsiya
+    if (target === 'overview') {
+      deselectAll();
+      flyTo(OVERVIEW);
+    } else if (target === 'next') {
+      stepStation(1);
+    } else if (target === 'prev') {
+      stepStation(-1);
+    } else {
+      openSection(target);
+    }
+  }
+});
+
+document.getElementById('tour-stop').addEventListener('click', stopTour);
+
+// Escape — tur va cardni yopadi; [ va ] — oldingi/keyingi loyiha
 window.addEventListener('keydown', (event) => {
-  if (event.key === 'Escape') deselectAll();
+  if (event.key === 'Escape') {
+    stopTour();
+    deselectAll();
+  } else if (event.key === ']') {
+    stopTour();
+    stepStation(1);
+  } else if (event.key === '[') {
+    stopTour();
+    stepStation(-1);
+  }
 });
 
 /* ============================================================
    11. RESIZE — oyna o'lchami o'zgarganda
    ============================================================ */
-window.addEventListener('resize', () => {
+function resizeRenderer() {
   // Kameraning ekran nisbatini yangilaymiz, aks holda rasm cho'ziladi
   camera.aspect = window.innerWidth / window.innerHeight;
   camera.updateProjectionMatrix();
 
-  // Renderer ham yangi o'lchamga moslashadi
+  // Renderer va bloom zanjiri ham yangi o'lchamga moslashadi
   renderer.setSize(window.innerWidth, window.innerHeight);
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-});
+  composer.setPixelRatio(renderer.getPixelRatio());
+  composer.setSize(window.innerWidth, window.innerHeight);
+}
+
+window.addEventListener('resize', resizeRenderer);
 
 /* ============================================================
    12. ANIMATSIYA SIKLI (animate loop)
@@ -1858,51 +2266,88 @@ window.addEventListener('resize', () => {
 */
 let lastFrameTime = performance.now();
 
+// Tezlik o'lchovi (sifat rejimi uchun): dastlabki kadrlar o'rtachasi
+let frameCount = 0;
+let measuredTime = 0;
+const WARMUP_FRAMES = 20;   // shader kompilyatsiyasi kadrlari hisobga kirmaydi
+const MEASURE_FRAMES = 90;
+
 function animate() {
   requestAnimationFrame(animate);
 
+  const now = performance.now();
+  const rawDelta = now - lastFrameTime;
   // Uzoq pauzalardan keyin (tab yashirilgan) delta juda katta bo'lib
   // qoladi — chiroq bir kadrda devor ortiga "teleport" bo'lmasligi
   // uchun 50ms bilan cheklaymiz
-  const now = performance.now();
-  const dt = Math.min((now - lastFrameTime) / 1000, 0.05);
+  const dt = Math.min(rawDelta / 1000, 0.05);
   lastFrameTime = now;
 
   // Damping (inersiya) yoqilgan bo'lsa, har kadrda update() chaqirish SHART,
   // aks holda silliq harakat ishlamaydi
   controls.update();
 
-  // Tanlash/xiralashtirish tween'larini yangilaymiz
-  updateTweens(performance.now());
+  // Tanlash, kamera parvozi, kun/tun tween'larini yangilaymiz
+  updateTweens(now);
 
   /*
     "Kimdir uyda" pulsi: lampalar va 1-qavat oynalari nuri sinus bo'yicha
-    sekin kuchayib-pasayadi. Hammasi bir xil speed/phase bilan belgilangan,
-    shuning uchun butun 1-qavat bir maromda "nafas oladi".
+    sekin kuchayib-pasayadi. Kun/tun koeffitsiyenti (glow) ustiga
+    ko'paytiriladi — kunduzi puls ham so'nadi.
   */
-  const time = performance.now() * 0.001;
+  const time = now * 0.001;
+  const glow = atmosphere.state.glow;
   pulsingMaterials.forEach((p) => {
-    p.material.emissiveIntensity = p.base + Math.sin(time * p.speed + p.phase) * p.amp;
+    p.material.emissiveIntensity =
+      (p.base + Math.sin(time * p.speed + p.phase) * p.amp) * glow;
   });
 
   // Jonlilik: qushlar, daraxt tebranishi, tutun, bulutlar (9-bo'lim)
   updateAmbientAnimations(time);
 
+  // Shaharcha: tishli g'ildirak, ovoz to'lqinlari, o'yin taxtasi, kitob satrlari
+  town.update(time);
+
   // Uchar chiroq: harakat + hotspot tekshiruvi (controllableOrb.js)
-  updateOrb(dt, time);
+  updateOrb(dt, time, camera);
   checkHotspots(camera, dt);
 
   /*
-    Hover masshtabi: har guruh o'z targetScale (1 yoki 1.03) tomon
-    har kadrda 15% yaqinlashadi — bu oddiy eksponensial lerp, keskin
-    sakrashsiz yumshoq "nafas olish" effekti beradi.
+    Hover masshtabi: har guruh o'z targetScale tomon har kadrda 15%
+    yaqinlashadi — oddiy eksponensial lerp, keskin sakrashsiz.
   */
-  interactiveGroups.forEach((group) => {
+  pickables.forEach((group) => {
     const s = THREE.MathUtils.lerp(group.scale.x, group.userData.targetScale, 0.15);
     group.scale.setScalar(s);
   });
 
-  renderer.render(scene, camera);
+  if (useBloom) composer.render();
+  else renderer.render(scene, camera);
+
+  frameCount += 1;
+
+  if (frameCount === 2) {
+    // Birinchi kadrlar chizildi — yuklanish ekrani ketadi, kirish parvozi boshlanadi
+    hideLoader();
+    flyTo(homeView(), 3400);
+  }
+
+  /*
+    Avtomatik sifat: isinish kadrlaridan keyingi 90 kadr o'rtachasi
+    ~30 fps dan sekin bo'lsa — bloom o'chadi va piksel zichligi tushadi.
+    Bir marta hal qilinadi (qualityLocked), keyin o'lchov to'xtaydi.
+  */
+  if (!qualityLocked && frameCount > WARMUP_FRAMES) {
+    measuredTime += Math.min(rawDelta, 100); // tab yashirilgan pauza o'lchovni buzmasin
+    if (frameCount === WARMUP_FRAMES + MEASURE_FRAMES) {
+      qualityLocked = true;
+      if (measuredTime / MEASURE_FRAMES > 32) {
+        useBloom = false;
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.25));
+        resizeRenderer();
+      }
+    }
+  }
 }
 
 animate();

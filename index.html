@@ -1,9 +1,12 @@
 <!DOCTYPE html>
-<html lang="uz">
+<html lang="en">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>3D Portfolio — Yakubbaev Azamat</title>
+  <title>Azamat Yakubbaev — 3D Portfolio</title>
+  <meta name="description" content="An interactive 3D town of Azamat Yakubbaev's work: ERP systems, Telegram apps, AI tools and open source projects." />
+  <meta name="theme-color" content="#1a1a3e" />
+  <link rel="icon" type="image/png" href="assets/favicon.png" />
 
   <!--
     Quicksand — yumaloq, "qog'ozga qo'lda yozilgan" hissi beruvchi shrift,
@@ -49,154 +52,49 @@
     canvas'ga tegadi), faqat ochilgan card pointer-events: auto oladi.
     Har bir card data-section orqali 3D dagi qavat userData.id ga mos.
   -->
-  <div class="card-overlay">
-
-    <!-- ===== ABOUT (1-qavat) ===== -->
-    <article class="info-card" data-section="about">
-      <button class="card-close" aria-label="Yopish">&times;</button>
-      <div class="card-body">
-        <div class="about-header">
-          <!-- Foto joy-tutuvchi: haqiqiy rasm qo'yilganda <img> bilan almashtiriladi -->
-          <div class="avatar-placeholder">👤</div>
-          <div>
-            <h2>Azamat Yakubbaev</h2>
-            <p class="subtitle">Full Stack Developer</p>
-          </div>
-        </div>
-        <p>
-          Hi! I'm a passionate full stack web developer with expertise in modern technologies and frameworks. I love creating seamless digital experiences that combine beautiful design with robust functionality.
-        </p>
-      </div>
-    </article>
-
-    <!-- ===== PROJECTS (2-qavat) ===== -->
-    <article class="info-card" data-section="projects">
-      <button class="card-close" aria-label="Yopish">&times;</button>
-      <div class="card-body">
-        <h2>Projects</h2>
-
-        <div class="project-item">
-          <h3>The State Museum of History and Culture of the Republic of Karakalpakstan</h3>
-          <p>The Historical Museum Website is a responsive, multilingual web application developed for a cultural institution to showcase exhibitions, collections, news, and contact details in an accessible and modern interface. The goal of this project was to provide museum visitors and researchers with up-to-date information through a well-structured, API-driven frontend.</p>
-          <a class="btn" href="https://historical-museum.uz/" target="_blank" rel="noopener">View</a>
-        </div>
-
-        <div class="project-item">
-          <h3>Loyiha nomi 2</h3>
-          <p>Loyiha haqida bir-ikki gaplik qisqa tavsif shu yerda turadi.</p>
-          <a class="btn" href="#" target="_blank" rel="noopener">Ko'rish</a>
-        </div>
-
-        <div class="project-item">
-          <h3>Loyiha nomi 3</h3>
-          <p>Loyiha haqida bir-ikki gaplik qisqa tavsif shu yerda turadi.</p>
-          <a class="btn" href="#" target="_blank" rel="noopener">Ko'rish</a>
-        </div>
-      </div>
-    </article>
-
-    <!-- ===== SKILLS (tom) ===== -->
-    <article class="info-card" data-section="skills">
-      <button class="card-close" aria-label="Yopish">&times;</button>
-      <div class="card-body">
-        <h2>Ko'nikmalar</h2>
-        <!-- Ikonkalar hozircha emoji joy-tutuvchi; keyin SVG/rasmga almashtiriladi -->
-        <ul class="skills-list">
-          <li><span class="skill-icon">🟨</span> JavaScript</li>
-          <li><span class="skill-icon">🎲</span> Three.js</li>
-          <li><span class="skill-icon">🌐</span> HTML / CSS</li>
-          <li><span class="skill-icon">🟩</span> Node.js</li>
-          <li><span class="skill-icon">🗄️</span> SQL / NoSQL</li>
-          <li><span class="skill-icon">🔧</span> Git</li>
-        </ul>
-      </div>
-    </article>
-
-    <!-- ===== CONTACT (pochta qutisi) ===== -->
-    <article class="info-card" data-section="contact">
-      <button class="card-close" aria-label="Yopish">&times;</button>
-      <div class="card-body">
-        <h2>Bog'lanish</h2>
-        <p>Hamkorlik taklifingiz bormi? Xat yozing — pochta qutisi doim ochiq!</p>
-        <div class="contact-links">
-          <a class="btn" href="mailto:yakubbaevdev@gmail.com">✉️ Email</a>
-          <a class="btn" href="https://github.com/onlineazamat" target="_blank" rel="noopener">🐙 GitHub</a>
-          <a class="btn" href="https://linkedin.com/in/onlineazamat" target="_blank" rel="noopener">💼 LinkedIn</a>
-        </div>
-      </div>
-    </article>
-
-    <!-- ============================================================
-         MAXFIY CARDLAR — uchar chiroq hotspotlari ochadigan topilmalar.
-         Asosiy .info-card uslubini oladi, lekin .secret-card klassi
-         oltin chegara beradi ("maxfiy topilma" hissi). main.js dagi
-         asosiy card mantig'i bularni ATAYLAB chetlab o'tadi
-         (:not(.secret-card)) — ularni faqat controllableOrb.js boshqaradi.
-         ============================================================ -->
-
-    <!-- Hotspot: katta daraxt tagida -->
-    <article class="info-card secret-card" data-hotspot="hobbies">
-      <button class="card-close" aria-label="Yopish">&times;</button>
-      <div class="card-body">
-        <span class="secret-tag">✦ Maxfiy topilma</span>
-        <h2>🎯 Qiziqishlarim</h2>
-        <p>
-          Bu yerga hobbi va qiziqishlaringiz yoziladi: masalan, shaxmat,
-          fotografiya, sayohat, kitoblar... (placeholder matn)
-        </p>
-      </div>
-    </article>
-
-    <!-- Hotspot: uyning orqa hovlisida -->
-    <article class="info-card secret-card" data-hotspot="certificates">
-      <button class="card-close" aria-label="Yopish">&times;</button>
-      <div class="card-body">
-        <span class="secret-tag">✦ Maxfiy topilma</span>
-        <h2>📜 Sertifikatlar</h2>
-        <p>
-          Bu yerga sertifikatlar ro'yxati yoziladi: kurs nomi, platforma,
-          yil... (placeholder matn)
-        </p>
-      </div>
-    </article>
-
-    <!-- Hotspot: pochta qutisi yonida -->
-    <article class="info-card secret-card" data-hotspot="fact">
-      <button class="card-close" aria-label="Yopish">&times;</button>
-      <div class="card-body">
-        <span class="secret-tag">✦ Maxfiy topilma</span>
-        <h2>✨ Qiziqarli fakt</h2>
-        <p>
-          Bu yerga o'zingiz haqingizda kutilmagan, esda qoladigan bitta
-          fakt yoziladi. (placeholder matn)
-        </p>
-      </div>
-    </article>
-
-    <!-- Hotspot: nom lavhasi yonida -->
-    <article class="info-card secret-card" data-hotspot="cv">
-      <button class="card-close" aria-label="Yopish">&times;</button>
-      <div class="card-body">
-        <span class="secret-tag">✦ Maxfiy topilma</span>
-        <h2>📄 CV yuklab olish</h2>
-        <p>To'liq rezyumeni bir bosishda yuklab oling:</p>
-        <!-- href keyin haqiqiy CV fayliga almashtiriladi -->
-        <a class="btn" href="#" download>⬇️ CV yuklab olish (PDF)</a>
-      </div>
-    </article>
-
+  <!--
+    Yuklanish ekrani — three.js va sahna tayyor bo'lguncha ko'rinadi,
+    birinchi kadr chizilgach main.js uni so'ndiradi (ui.js: hideLoader).
+  -->
+  <div id="loader">
+    <div class="loader-name">AZAMAT YAKUBBAEV</div>
+    <div class="loader-sub">Building the town…</div>
+    <div class="loader-bar"><i></i></div>
   </div>
+
+  <!--
+    Card overlay — 3D canvas USTIDA turadigan HTML qatlam.
+    Konteynerning o'zi pointer-events: none (sichqoncha undan o'tib
+    canvas'ga tegadi), faqat ochilgan card pointer-events: auto oladi.
+    Cardlar endi shu yerda qo'lda yozilmaydi: ui.js ularni data.js
+    dagi kontentdan generatsiya qiladi (har biri data-section yoki
+    data-hotspot atributi bilan 3D obyektga bog'lanadi).
+  -->
+  <div class="card-overlay"></div>
+
+  <!--
+    Tur paneli — "▶ Tour" rejimida joriy bekat nomi va progress.
+  -->
+  <div id="tour-bar">
+    <span class="tour-step"></span>
+    <span class="tour-title"></span>
+    <button id="tour-stop">Stop</button>
+    <div class="tour-progress"><i></i></div>
+  </div>
+
+  <!-- Dock — pastki navigatsiya; tugmalarni ui.js yasaydi -->
+  <nav id="dock" aria-label="Sections"></nav>
 
   <!--
     Hotspot taklif pufakchasi — 3D nuqta ekran koordinatasiga
     proyeksiyalanadi (controllableOrb.js), shu div o'sha joyga suriladi.
   -->
-  <div id="orb-tooltip">✦ Kashfiyot! Shu yerda bir soniya to'xtang…</div>
+  <div id="orb-tooltip"></div>
 
   <!-- Boshqaruv eslatmasi — doim ko'rinib turadigan kichik belgi -->
   <div class="control-hint">
-    <span class="hint-desktop">💡 Uchar chiroqni <b>WASD / strelkalar</b> bilan boshqaring</span>
-    <span class="hint-mobile">💡 Uchar chiroqni joystik bilan boshqaring</span>
+    <span class="hint-desktop">Fly the firefly with <b>WASD / arrow keys</b> · click a building to visit</span>
+    <span class="hint-mobile">Fly the firefly with the joystick</span>
   </div>
 
   <!-- Virtual joystick — faqat touch qurilmalarda ko'rinadi (CSS) -->
@@ -211,9 +109,11 @@
     Hozirgacha: 0.1 fundament → 0.2 uy → 0.3 interaktivlik →
     0.4 cardlar → 0.5 atrof-muhit → 0.6 deraza ichki manzaralari →
     0.7 jonlilik (qushlar, shamol, tutun, bulutlar, yulduzlar) →
-    0.8 uchar chiroq (boshqariladigan orb + maxfiy hotspotlar).
+    0.8 uchar chiroq (boshqariladigan orb + maxfiy hotspotlar) →
+    1.0 loyihalar shaharchasi (8 bino, kamera parvozi, tur rejimi,
+    kun/tun, bloom, haqiqiy kontent data.js dan).
   -->
-  <div class="version-badge">v0.8.0</div>
+  <div class="version-badge">v1.0.0</div>
 
   <!-- type="module" shart: import/export sintaksisi faqat modullarda ishlaydi -->
   <script type="module" src="main.js"></script>
