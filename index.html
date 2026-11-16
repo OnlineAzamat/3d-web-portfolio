@@ -117,5 +117,17 @@
 
   <!-- type="module" shart: import/export sintaksisi faqat modullarda ishlaydi -->
   <script type="module" src="main.js"></script>
+
+  <!--
+    Vercel Web Analytics — bundlersiz saytlar uchun rasmiy usul
+    (@vercel/analytics paketining inject() funksiyasi ham aynan shu
+    skriptni ulaydi). window.va — skript yuklanguncha kelgan hodisalarni
+    navbatga yig'adi. /_vercel/insights/ yo'lini Vercel o'zi beradi:
+    lokal serverda 404 qaytaradi — bu normal, saytga ta'sir qilmaydi.
+  -->
+  <script>
+    window.va = window.va || function () { (window.vaq = window.vaq || []).push(arguments); };
+  </script>
+  <script defer src="/_vercel/insights/script.js"></script>
 </body>
 </html>
