@@ -1794,6 +1794,16 @@ function showCard(id) {
     card.classList.toggle('visible', open);
   });
   setActiveNav(id);
+  if (id) trackEvent('Section opened', { section: id });
+}
+
+/*
+  Vercel Analytics maxsus hodisasi: qaysi bino/bo'lim ko'proq ochiladi.
+  window.va index.html da e'lon qilingan; u yo'q bo'lsa (masalan,
+  reklama bloklovchi) — jimgina o'tkazib yuboriladi.
+*/
+function trackEvent(name, data) {
+  if (typeof window.va === 'function') window.va('event', { name, data });
 }
 
 /* ============================================================
@@ -1984,6 +1994,7 @@ function nextTourStop() {
 
 function startTour() {
   stopTour();
+  trackEvent('Tour started', {});
   tour = { index: -1, timer: null };
   nextTourStop();
 }
