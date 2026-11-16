@@ -3,13 +3,14 @@
   --------------------------------------------------
   Foydalanuvchi WASD/strelkalar (mobilda virtual joystick) bilan
   boshqaradigan kichik porloq jism. Vazifasi — hovlidagi 4 ta YASHIRIN
-  hotspot nuqtasini ochish (hobbi, sertifikatlar, fakt, CV). U asosiy
+  hotspot nuqtasini ochish (raqamlar, AI agentlar, fakt, CV) va v1.0 dan
+  boshlab shaharcha binolariga "tashrif buyurish" (bekatlar). U asosiy
   navigatsiya (uy qavatlari) bilan raqobatlashmaydi: raycaster'ga
   tushmaydi, bosib bo'lmaydi, faqat "uchirib borib topiladi".
 
   main.js bilan shartnoma:
     createOrb(scene)            — bir marta, sahna qurilgandan keyin
-    updateOrb(dt, time)         — animate() ichida har kadr
+    updateOrb(dt, time, camera) — animate() ichida har kadr
     checkHotspots(camera, dt)   — animate() ichida har kadr
 */
 
@@ -24,12 +25,15 @@ const ACCEL = 16;          // tezlanish, birlik/s²
 const MAX_SPEED = 5.5;     // maksimal tezlik, birlik/s
 const FRICTION = 5.5;      // qo'yib yuborilgandagi sekinlashish koeffitsiyenti
 
-// Hovli chegaralari: butalar to'sig'i (±7.4) ichida, old tomonda esa
-// yo'lka oxirigacha (z≈9.5) ruxsat — hotspot va lavha o'sha tomonda
-const BOUNDS = { minX: -7, maxX: 7, minZ: -7, maxZ: 9.8 };
+/*
+  Parvoz chegarasi — v1.0 dan boshlab butun shaharcha: chiroq butalar
+  ustidan (u 2 birlik balandda uchadi, butalar past) halqa yo'lgacha va
+  binolargacha bora oladi. Aylana chegara: markazdan shu radiusgacha.
+*/
+const BOUNDS_RADIUS = 21.5;
 
 const HOTSPOT_RADIUS = 1.5;   // shu masofada tooltip ko'rinadi
-const HOTSPOT_REARM = 2.2;    // shu masofadan uzoqlashganda hotspot qayta "qurollanadi"
+const HOTSPOT_REARM_MARGIN = 0.7; // radiusdan shuncha uzoqlashganda hotspot qayta "qurollanadi"
 const DWELL_TIME = 1.0;       // card ochilishi uchun to'xtab turish vaqti, soniya
 
 /*
@@ -40,6 +44,8 @@ const DWELL_TIME = 1.0;       // card ochilishi uchun to'xtab turish vaqti, soni
 */
 const HOUSE_HALF = 2.6; // devor 2.2 + jism radiusi + kichik zaxira
 
+// (shaharcha binolari va ko'cha chiroqlari createOrb() ga options.obstacles
+// orqali keladi va shu ro'yxatga qo'shiladi)
 const CIRCLE_OBSTACLES = [
   { x: -6.5, z: 2.5, r: 1.3 },  // katta daraxt (chapda)
   { x: -8.5, z: -3.5, r: 1.6 }, // chekka daraxt (asosan chegara ortida)
@@ -55,9 +61,11 @@ const CIRCLE_OBSTACLES = [
   yonida — foydalanuvchi chiroqni aylantirar ekan tabiiy yo'lda uchraydi.
   data-hotspot atributi index.html dagi .secret-card bilan bog'laydi.
 */
+const DEFAULT_TOOLTIP = '✦ A discovery! Hold still for a second…';
+
 const HOTSPOT_DEFS = [
-  { id: 'hobbies', x: -5.2, z: 3.4 },      // katta daraxt soyasida
-  { id: 'certificates', x: 0, z: -5.4 },   // uyning orqa hovlisida
+  { id: 'numbers', x: -5.2, z: 3.4 },      // katta daraxt soyasida
+  { id: 'agents', x: 0, z: -5.4 },         // uyning orqa hovlisida
   { id: 'fact', x: 3.9, z: 4.3 },          // pochta qutisi yonida
   { id: 'cv', x: 4.6, z: 7.3 }             // nom lavhasi yonida
 ];
@@ -82,6 +90,7 @@ let tooltipEl = null;
 // Har kadrda qayta ishlatiladigan vaqtinchalik vektorlar (GC'siz)
 const _screenPos = new THREE.Vector3();
 const _pushNormal = new THREE.Vector3();
+const _forward = new THREE.Vector3();
 
 /* ============================================================
    YASASH
@@ -108,7 +117,16 @@ function createGlowTexture() {
   return new THREE.CanvasTexture(canvas);
 }
 
-export function createOrb(scene) {
+/*
+  options (ixtiyoriy):
+    obstacles[] — qo'shimcha doira to'siqlar { x, z, r } (shaharcha binolari)
+    hotspots[]  — qo'shimcha "bekat"lar { id, x, z, radius, label, onOpen, onClose }.
+                  Maxfiy cardlardan farqi: card o'rniga callback chaqiriladi —
+                  main.js shu orqali bino cardini ochadi va kamerani uchiradi.
+*/
+export function createOrb(scene, options = {}) {
+  if (options.obstacles) CIRCLE_OBSTACLES.push(...options.obstacles);
+
   const glowTexture = createGlowTexture();
 
   /* ---------- Jismning o'zi ---------- */
@@ -226,7 +244,7 @@ export function createOrb(scene) {
 
   tooltipEl = document.getElementById('orb-tooltip');
 
-  hotspots = HOTSPOT_DEFS.map((def) => {
+  hotspots = [...HOTSPOT_DEFS, ...(options.hotspots || [])].map((def) => {
     /*
       Ko'rinmas marker (talabga ko'ra userData.hotspotId bilan) —
       sahnada "rasmiy manzil" bo'lib turadi; masofa hisobi va tooltip
@@ -242,6 +260,10 @@ export function createOrb(scene) {
       position: marker.position,
       dwell: 0,
       opened: false,
+      radius: def.radius || HOTSPOT_RADIUS,
+      label: def.label || DEFAULT_TOOLTIP,
+      onOpen: def.onOpen || null,
+      onClose: def.onClose || null,
       element: document.querySelector(`.secret-card[data-hotspot="${def.id}"]`)
     };
   });
@@ -342,7 +364,7 @@ function bindJoystick() {
    HAR KADR: HARAKAT
    ============================================================ */
 
-export function updateOrb(dt, time) {
+export function updateOrb(dt, time, camera) {
   if (!trailState) return; // createOrb hali chaqirilmagan
 
   /* ---------- Kirish → tezlanish ---------- */
@@ -355,17 +377,49 @@ export function updateOrb(dt, time) {
     (keys.down ? 1 : 0) - (keys.up ? 1 : 0) + joystick.z, -1, 1
   );
 
-  velocity.x += inputX * ACCEL * dt;
-  velocity.z += inputZ * ACCEL * dt;
+  /*
+    Boshqaruv KAMERAGA nisbatan: "oldinga" — kamera qarab turgan tomon
+    (yerga proyeksiyasi), "o'ngga" — ekranning o'ng tomoni. v1.0 da kamera
+    shaharcha bo'ylab uchib yuradi; dunyo o'qlariga bog'langan boshqaruv
+    orqa tomondan qaralganda teskari ishlab qolardi.
+  */
+  let moveX = inputX;
+  let moveZ = inputZ;
+  if (camera) {
+    camera.getWorldDirection(_forward);
+    _forward.y = 0;
+    if (_forward.lengthSq() > 0.0001) {
+      _forward.normalize();
+      // o'ng = oldinga × tepaga → (-fz, 0, fx)
+      moveX = -_forward.z * inputX - _forward.x * inputZ;
+      moveZ = _forward.x * inputX - _forward.z * inputZ;
+    }
+  }
+  const moving = moveX !== 0 || moveZ !== 0;
+
+  velocity.x += moveX * ACCEL * dt;
+  velocity.z += moveZ * ACCEL * dt;
 
   /*
-    Ishqalanish faqat kirish YO'Q o'qda: tugma bosilmagan zahoti jism
+    Ishqalanish kirish YO'Q paytda: tugma qo'yib yuborilgan zahoti jism
     keskin to'xtamaydi, eksponensial ravishda sekinlashadi (dt ga
     bog'langan — 144Hz da ham 60Hz dagidek his qilinadi).
   */
   const decay = Math.exp(-FRICTION * dt);
-  if (inputX === 0) velocity.x *= decay;
-  if (inputZ === 0) velocity.z *= decay;
+  if (!moving) {
+    velocity.x *= decay;
+    velocity.z *= decay;
+  } else {
+    // Kirish yo'nalishiga perpendikulyar tezlik so'ndiriladi — burilishda
+    // jism "sirpanib" ketmaydi, yangi yo'nalishga tez o'tadi
+    const length = Math.hypot(moveX, moveZ);
+    const dx = moveX / length, dz = moveZ / length;
+    const along = velocity.x * dx + velocity.z * dz;
+    const sideX = velocity.x - dx * along;
+    const sideZ = velocity.z - dz * along;
+    velocity.x = dx * along + sideX * decay;
+    velocity.z = dz * along + sideZ * decay;
+  }
 
   // Diagonal harakatda ham tezlik chegaradan oshmasin
   const speed = Math.hypot(velocity.x, velocity.z);
@@ -379,11 +433,20 @@ export function updateOrb(dt, time) {
 
   /* ---------- Chegaralar va to'siqlar ---------- */
 
-  // Hovli chetlari: devorga urilgandek — pozitsiya qirqiladi, tezlik nolga
-  if (orb.position.x < BOUNDS.minX) { orb.position.x = BOUNDS.minX; velocity.x = 0; }
-  if (orb.position.x > BOUNDS.maxX) { orb.position.x = BOUNDS.maxX; velocity.x = 0; }
-  if (orb.position.z < BOUNDS.minZ) { orb.position.z = BOUNDS.minZ; velocity.z = 0; }
-  if (orb.position.z > BOUNDS.maxZ) { orb.position.z = BOUNDS.maxZ; velocity.z = 0; }
+  // Shaharcha cheti: aylana devor — pozitsiya aylanaga qaytariladi,
+  // tezlikning tashqariga qaragan qismi olib tashlanadi (chet bo'ylab sirpanadi)
+  const fromCenter = Math.hypot(orb.position.x, orb.position.z);
+  if (fromCenter > BOUNDS_RADIUS) {
+    const nx = orb.position.x / fromCenter;
+    const nz = orb.position.z / fromCenter;
+    orb.position.x = nx * BOUNDS_RADIUS;
+    orb.position.z = nz * BOUNDS_RADIUS;
+    const outward = velocity.x * nx + velocity.z * nz;
+    if (outward > 0) {
+      velocity.x -= nx * outward;
+      velocity.z -= nz * outward;
+    }
+  }
 
   /*
     Uy — AABB: jism kengaytirilgan quti ichiga kirib qolsa, eng KAM
@@ -469,6 +532,11 @@ export function updateOrb(dt, time) {
    ============================================================ */
 
 function openSecretCard(hotspot) {
+  // Bekat (bino) — card o'rniga main.js callback'i
+  if (hotspot.onOpen) {
+    hotspot.onOpen();
+    return;
+  }
   // Bitta vaqtda faqat bitta maxfiy card ochiq turadi
   hotspots.forEach((h) => {
     if (h.element) h.element.classList.toggle('visible', h === hotspot);
@@ -476,6 +544,7 @@ function openSecretCard(hotspot) {
 }
 
 function closeSecretCard(hotspot) {
+  if (hotspot.onClose) hotspot.onClose();
   if (hotspot.element) hotspot.element.classList.remove('visible');
 }
 
@@ -502,7 +571,7 @@ export function checkHotspots(camera, dt) {
   hotspots.forEach((h) => {
     const distance = orb.position.distanceTo(h.position);
 
-    if (distance < HOTSPOT_RADIUS) {
+    if (distance < h.radius) {
       if (!h.opened) {
         h.dwell += dt;
         if (h.dwell >= DWELL_TIME) {
@@ -513,7 +582,7 @@ export function checkHotspots(camera, dt) {
           tooltipHotspot = h; // hali ochilmagan — taklif pufakchasi ko'rinadi
         }
       }
-    } else if (distance > HOTSPOT_REARM) {
+    } else if (distance > h.radius + HOTSPOT_REARM_MARGIN) {
       /*
         Gisterezis: qayta qurollanish radiusi (2.2) trigger radiusidan (1.5)
         katta. Jism chegarada arang tebransa card ochilib-yopilib
@@ -539,6 +608,9 @@ export function checkHotspots(camera, dt) {
     if (_screenPos.z < 1) {
       tooltipEl.style.left = `${(_screenPos.x * 0.5 + 0.5) * window.innerWidth}px`;
       tooltipEl.style.top = `${(-_screenPos.y * 0.5 + 0.5) * window.innerHeight}px`;
+      if (tooltipEl.textContent !== tooltipHotspot.label) {
+        tooltipEl.textContent = tooltipHotspot.label;
+      }
       tooltipEl.classList.add('visible');
       return;
     }
